@@ -1,7 +1,7 @@
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+# $Id: pgcon.py 47308 2018-07-31 19:42:07Z friedel $
+# $Rev:: 47308                            $:  # Revision of last commit.
+# $LastChangedBy:: friedel                $:  # Author of last commit.
+# $LastChangedDate:: 2018-07-31 14:42:07 #$:  # Date of last commit.
 
 """
     Define psycopg2-specific database access methods
@@ -22,7 +22,7 @@
 
 """
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 47308 $"
 
 import datetime
 import random
@@ -226,3 +226,7 @@ class PostgresConnection (pgConnection):
     def get_current_timestamp_str (self):
         return "now()"
 
+    def ping(self):
+        if self.closed == 0:
+            return True
+        return False

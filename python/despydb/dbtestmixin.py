@@ -1,7 +1,7 @@
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+# $Id: dbtestmixin.py 33097 2015-01-20 15:14:29Z felipe $
+# $Rev:: 33097                            $:  # Revision of last commit.
+# $LastChangedBy:: felipe                 $:  # Author of last commit.
+# $LastChangedDate:: 2015-01-20 09:14:29 #$:  # Date of last commit.
 
 """
     Provide a mixin class for DesDbi sub-classes meant for testing.
@@ -21,7 +21,7 @@
 
 """
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 33097 $"
 
 import random
 

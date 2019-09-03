@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+# $Id: desdbi.py 48541 2019-05-20 19:06:49Z friedel $
+# $Rev:: 48541                            $:  # Revision of last commit.
+# $LastChangedBy:: friedel                $:  # Author of last commit.
+# $LastChangedDate:: 2019-05-20 14:06:49 #$:  # Date of last commit.
 
 """
     Provide a dialect-neutral interface to DES databases.
@@ -14,23 +14,25 @@
                  interface based on the Python DB API with extensions to allow
                  interaction with the database in a dialect-neutral manner.
 
-    Developed at: 
+    Developed at:
     The National Center for Supercomputing Applications (NCSA).
 
-    Copyright (C) 2011 Board of Trustees of the University of Illinois. 
+    Copyright (C) 2011 Board of Trustees of the University of Illinois.
     All rights reserved.
 
 """
 
 __version__ = "2.0.0"
 
-import re 
+import re
 import sys
 import copy
 from despyserviceaccess import serviceaccess
 import time
 import socket
 from collections import OrderedDict
+import despymisc.miscutils as miscutils
+
 # importing of DB specific modules done down inside code
 
 import errors
@@ -65,7 +67,7 @@ class DesDbi (object):
     closed without an attempt query the table.
     """
 
-    def __init__(self, desfile=None, section=None):
+    def __init__(self, desfile=None, section=None, retry=False, connection=None, threaded=False):
         """
         Create an interface object for a DES database.
 
@@ -75,49 +77,31 @@ class DesDbi (object):
         cases.
 
         """
+        self.retry = retry
+        if connection is None:
+            self.inherit = False
+            self.configdict = serviceaccess.parse(desfile,section,'DB',retry)
 
-        self.configdict = serviceaccess.parse(desfile,section,'DB')
-        self.type       = self.configdict['type']
+            self.type       = self.configdict['type']
 
-        serviceaccess.check (self.configdict, 'DB')
+            serviceaccess.check (self.configdict, 'DB')
 
-        if self.type == 'oracle':
-            import oracon
-            conClass = oracon.OracleConnection
-        elif self.type == 'postgres':
-            import pgcon
-            conClass = pgcon.PostgresConnection
+            if self.type == 'oracle':
+                self.configdict['threaded'] = threaded
+                import oracon
+                self.conClass = oracon.OracleConnection
+            elif self.type == 'postgres':
+                import pgcon
+                self.conClass = pgcon.PostgresConnection
+            else:
+                raise errors.UnknownDBTypeError (self.type)
+
+            self.connect()
         else:
-            raise errors.UnknownDBTypeError (self.type)
-
-        MAXTRIES = 5
-        TRY_DELAY = 10 # seconds
-        trycnt = 0
-        done = False
-        lasterr = ""
-        while not done and trycnt < MAXTRIES: 
-            trycnt += 1
-            try:
-                self.con = conClass (self.configdict)
-                done = True
-            except Exception as e:
-                lasterr = str(e).strip()
-                timestamp = time.strftime("%x %X", time.localtime())
-                print "%s: Error when trying to connect to database: %s" % (timestamp,lasterr)
-                if trycnt < MAXTRIES:
-                    print "\tRetrying...\n"
-                    time.sleep(TRY_DELAY)
-
-        if not done:
-            print "Exechost:", socket.gethostname()
-            print "Connection information:", str(self)
-            #for key in ("user", "type", "port", "server"):
-            #    print "\t%s = %s" % (key, self.configdict[key])
-            print ""
-            raise Exception("Aborting attempt to connect to database.  Last error message: %s" % lasterr)
-        elif trycnt > 1: # only print success message if we've printed failure message
-            print "Successfully connected to database after retrying."
-                
+            self.inherit = True
+            self.configdict = connection.configdict
+            self.type = connection.type
+            self.con = connection.con
 
     def __enter__(self):
         "Enable the use of this class as a context manager."
@@ -132,15 +116,54 @@ class DesDbi (object):
         rollback that transaction.  In either case, close the database
         connection.
         """
-
         if exc_type is None:
             self.commit ()
         else:
             self.rollback ()
-
+        # don't close the connection if this is not the originator
+        if self.inherit:
+            return False
         self.close ()
 
         return False
+
+    def connect(self):
+        MAXTRIES = 1
+        if self.retry:
+            MAXTRIES = 5
+        TRY_DELAY = 10 # seconds
+        trycnt = 0
+        done = False
+        lasterr = ""
+        while not done and trycnt < MAXTRIES:
+            trycnt += 1
+            try:
+                self.con = self.conClass (self.configdict)
+                done = True
+            except Exception as e:
+                lasterr = str(e).strip()
+                print lasterr
+                timestamp = time.strftime("%x %X", time.localtime())
+                print "%s: Could not connect to database, try %i/%i" % (timestamp, trycnt, MAXTRIES)
+                if trycnt < MAXTRIES:
+                    print "\tRetrying...\n"
+                    time.sleep(TRY_DELAY)
+                else:
+                    print "  Error, could not connect to the database after %i retries: %s" % (MAXTRIES, lasterr)
+
+        if not done:
+            print "Exechost:", socket.gethostname()
+            print "Connection information:", str(self)
+            print ""
+            raise Exception("Aborting attempt to connect to database.  Last error message: %s" % lasterr)
+        elif trycnt > 1: # only print success message if we've printed failure message
+            print "Successfully connected to database after retrying."
+
+    def reconnect(self):
+        if not self.ping():
+            self.connect()
+        else:
+            print 'Connection still good, not reconnecting'
 
     def autocommit (self, state = None):
         """
@@ -186,8 +209,8 @@ class DesDbi (object):
     def get_column_metadata(self, table_name):
         """
         Return a dictionary of 7-item sequences, with lower case column name keys.
-        The sequence values are: 
-        (name, type, display_size, internal_size, precision, scale, null_ok) 
+        The sequence values are:
+        (name, type, display_size, internal_size, precision, scale, null_ok)
         Constants are defined for the sequence indexes in coreutils_defs.py
         """
         cursor = self.cursor()
@@ -198,7 +221,7 @@ class DesDbi (object):
             cursor.execute(sqlstr)
         else:
             raise errors.UnknownDBTypeError (self.type)
-        retval = {} 
+        retval = {}
         for col in cursor.description:
             retval[col[defs.COL_NAME].lower()] = col
         cursor.close()
@@ -426,7 +449,7 @@ class DesDbi (object):
                 print "params:", row
                 print "\n\n"
                 raise
-        
+
         curs.close ()
 
     def query_simple (self, from_, cols = '*', where = None, orderby = None,
@@ -471,7 +494,7 @@ class DesDbi (object):
                 rows = dbh.query_simple ('tab1', cols, where, ord, parms)
             Possible Output:
                [{"col1": 23, "col2": "ABC"}, {"col1": 45, "col2": "AAA"}]
-                
+
         """
 
         if not from_:
@@ -587,7 +610,6 @@ class DesDbi (object):
 
     def basic_insert_row (self, table, row):
         """ Insert a row into the table """
-
         ctstr = self.get_current_timestamp_str()
 
         cols = row.keys()
@@ -628,6 +650,8 @@ class DesDbi (object):
         for c,v in wherevals.items():
             if v == ctstr:
                 whclause.append("%s=%s" % (c, v))
+            elif v is None:
+                whclause.append("%s is NULL" % (c))
             else:
                 whclause.append("%s=%s" % (c, self.get_named_bind_string('w_'+c)))
                 params['w_'+c] = v
@@ -637,11 +661,14 @@ class DesDbi (object):
             if v == ctstr:
                 upclause.append("%s=%s" % (c, v))
             else:
-                upclause.append("%s=%s" % (c, self.get_named_bind_string('u_'+c)))
-                params['u_'+c] = v
+                if isinstance(v, str) and 'TO_DATE' in v.upper():
+                    upclause.append('%s=%s' % (c,v))
+                else:
+                    upclause.append("%s=%s" % (c, self.get_named_bind_string('u_'+c)))
+                    params['u_'+c] = v
 
 
-        sql = "update %s set %s where %s" % (table, ','.join(upclause), 
+        sql = "update %s set %s where %s" % (table, ','.join(upclause),
                                              ' and '.join(whclause))
 
         curs = self.cursor()
@@ -662,7 +689,10 @@ class DesDbi (object):
             raise Exception("Error: 0 rows updated in table %s" % table)
 
         curs.close()
-   
+
+    def ping(self):
+        return self.con.ping()
+
 
 #### Embedded simple test
 if __name__ ==  '__main__' :

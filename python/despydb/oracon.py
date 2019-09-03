@@ -1,7 +1,7 @@
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+# $Id: oracon.py 48541 2019-05-20 19:06:49Z friedel $
+# $Rev:: 48541                            $:  # Revision of last commit.
+# $LastChangedBy:: friedel                $:  # Author of last commit.
+# $LastChangedDate:: 2019-05-20 14:06:49 #$:  # Date of last commit.
 
 """
     Define cx_Oracle-specific database access methods
@@ -13,15 +13,15 @@
                            with extensions to allow callers to interact with
                            the database in a dialect-neutral manner.
 
-    Developed at: 
+    Developed at:
     The National Center for Supercomputing Applications (NCSA).
-  
-    Copyright (C) 2012 Board of Trustees of the University of Illinois. 
+
+    Copyright (C) 2012 Board of Trustees of the University of Illinois.
     All rights reserved.
 
 """
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 48541 $"
 
 import datetime
 import socket
@@ -30,6 +30,8 @@ import warnings
 import cx_Oracle
 
 import errors
+
+import despymisc.miscutils as miscutils
 
 # Construct a name for the v$session module column to allow database auditing.
 
@@ -53,7 +55,8 @@ _TYPE_MAP = {cx_Oracle.BINARY       : bytearray,
              cx_Oracle.CURSOR       : cx_Oracle.CURSOR,
              cx_Oracle.DATETIME     : datetime.datetime,
              cx_Oracle.FIXED_CHAR   : str,
-             cx_Oracle.FIXED_UNICODE: unicode,
+             cx_Oracle.FIXED_NCHAR  : unicode,
+             #cx_Oracle.FIXED_UNICODE: unicode,
              cx_Oracle.INTERVAL     : datetime.timedelta,
              cx_Oracle.LOB          : bytearray,
              cx_Oracle.LONG_BINARY  : bytearray,
@@ -65,9 +68,10 @@ _TYPE_MAP = {cx_Oracle.BINARY       : bytearray,
              cx_Oracle.ROWID        : bytearray,
              cx_Oracle.STRING       : str,
              cx_Oracle.TIMESTAMP    : datetime.datetime,
-             cx_Oracle.UNICODE      : unicode
+             #cx_Oracle.UNICODE      : unicode
+             cx_Oracle.NCHAR        : unicode
             }
- 
+
 # Define some symbolic names for oracle error codes to make it clearer what
 # the error codes mean.
 
@@ -84,12 +88,12 @@ class OracleConnection (cx_Oracle.Connection):
     def __init__ (self, access_data):
         """
         Initialize an OracleConnection object
-        
+
         Connect the OracleConnection instance to the database identified in
         access_data.
 
         """
-
+        cx_args = {}
         user = access_data ['user']
         pswd = access_data ['passwd']
 
@@ -102,29 +106,40 @@ class OracleConnection (cx_Oracle.Connection):
             kwargs ['service_name'] = access_data ['name']
         else:
             raise errors.MissingDBId ()
-
-        if cx_Oracle.version > '5.1':
-            dsn = cx_Oracle.makedsn (**kwargs)
+        if access_data.get('service', None):
+            kwargs['service'] = access_data['service']
+        if 'sid' in kwargs:
+            cdt = "(SID=%s)" % kwargs ['sid']
         else:
-            # Previous makedsn() versions do not support service name
-            if 'sid' in kwargs:
-                cdt = "(SID=%s)" % kwargs ['sid']
-            else:
-                cdt = "(SERVICE_NAME=%s)" % kwargs ['service_name']
-            dsn = ("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%s))" 
-                   "(CONNECT_DATA=%s))") % (kwargs['host'], kwargs['port'], cdt)
+            cdt = "(SERVICE_NAME=%s)" % kwargs ['service_name']
+        if 'service' in kwargs:
+            cdt += '(SERVER=%s)' % kwargs['service']
+            cx_args['cclass'] = 'DESDM'
+            cx_args['purity'] = cx_Oracle.ATTR_PURITY_SELF
+        dsn = ("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%s))"
+               "(CONNECT_DATA=%s))") % (kwargs['host'], kwargs['port'], cdt)
+        if access_data.get('threaded', None):
+            cx_args['threaded'] = True
 
+        cx_args['dsn'] = dsn
+
+        #miscutils.fwdebug(3, "CXORACLE_DEBUG", "dsn = %s" % dsn)
+        miscutils.fwdebug(3, "CXORACLE_DEBUG", str(cx_args))
         try:
-            cx_Oracle.Connection.__init__ (self, user=user, password=pswd,
-                                           dsn=dsn, module = _MODULE_NAME)
+            #cx_Oracle.Connection.__init__ (self, user=user, password=pswd,
+            #                               dsn=dsn, module = _MODULE_NAME)
+            cx_Oracle.Connection.__init__ (self, user=user, password=pswd, **cx_args)
         except TypeError as exc:
             if str (exc.message).startswith ("'module' is an invalid keyword"):
                 warnings.warn ('Cannot set module name; cx_Oracle upgrade '
                                'recommended.')
-                cx_Oracle.Connection.__init__ (self, user=user, password=pswd,
-                                               dsn=dsn)
+                del cx_args['module']
+                cx_Oracle.Connection.__init__ (self, user=user, password=pswd, **cx_args)
+                #cx_Oracle.Connection.__init__ (self, user=user, password=pswd,
+                #                               dsn=dsn)
             else:
                 raise
+        self.module = _MODULE_NAME
 
     def cursor (self, fetchsize = None):
         """
@@ -156,7 +171,7 @@ class OracleConnection (cx_Oracle.Connection):
         "Return a format string for a statement to execute SQL expressions."
 
         return 'SELECT %s FROM DUAL'
-        
+
     def get_named_bind_string (self, name):
         "Return a named bind (substitution) string for name with cx_Oracle."
 
@@ -225,3 +240,10 @@ class OracleConnection (cx_Oracle.Connection):
         return "SYSTIMESTAMP"
 
 
+    def ping(self):
+        try:
+            curs = self.cursor()
+            curs.execute('select 1 from dual')
+            return True
+        except:
+            return False
