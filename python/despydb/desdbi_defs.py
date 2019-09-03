@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+# $Id: desdbi_defs.py 33097 2015-01-20 15:14:29Z felipe $
+# $Rev:: 33097                            $:  # Revision of last commit.
+# $LastChangedBy:: felipe                 $:  # Author of last commit.
+# $LastChangedDate:: 2015-01-20 09:14:29 #$:  # Date of last commit.
 
 # cx_Oracle indexes for cursor.description sequences
 COL_NAME = 0
