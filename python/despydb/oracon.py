@@ -14,13 +14,13 @@
                            the database in a dialect-neutral manner.
 
     Developed at:
-    The National Center for Supercomputing Applications (NCSA).
+    The National Center for Supercomputing Applications(NCSA).
 
-    Copyright (C) 2012 Board of Trustees of the University of Illinois.
+    Copyright(C) 2012 Board of Trustees of the University of Illinois.
     All rights reserved.
 
 """
-
+#pylint: disable=c-extension-no-member
 __version__ = "$Rev: 48541 $"
 
 import datetime
@@ -29,7 +29,7 @@ import warnings
 
 import cx_Oracle
 
-import errors
+import despydb.errors as errors
 
 import despymisc.miscutils as miscutils
 
@@ -38,13 +38,13 @@ import despymisc.miscutils as miscutils
 import __main__
 try:
     _MODULE_NAME = __main__.__file__
-except  AttributeError :
+except AttributeError:
     _MODULE_NAME = "unavailable"
 
-if _MODULE_NAME.rfind ('/') > -1:
-    _MODULE_NAME = _MODULE_NAME [_MODULE_NAME.rfind ('/') + 1:]
+if _MODULE_NAME.rfind('/') > -1:
+    _MODULE_NAME = _MODULE_NAME[_MODULE_NAME.rfind('/') + 1:]
 _MODULE_NAME += '@' + socket.getfqdn()
-_MODULE_NAME = _MODULE_NAME [:48]
+_MODULE_NAME = _MODULE_NAME[:48]
 
 # No need to rebuild this mapping every time it is used, so make it a global
 # module object.
@@ -76,16 +76,16 @@ _TYPE_MAP = {cx_Oracle.BINARY       : bytearray,
 # the error codes mean.
 
 _ORA_NO_TABLE_VIEW = 942    # table or view does not exist
-_ORA_NO_SEQUENCE   = 2289   # sequence does not exist
+_ORA_NO_SEQUENCE = 2289   # sequence does not exist
 
-class OracleConnection (cx_Oracle.Connection):
+class OracleConnection(cx_Oracle.Connection):
     """
     Provide cx_Oracle-specific implementations of canonical database methods
 
     Refer to desdbi.py for full method documentation.
     """
 
-    def __init__ (self, access_data):
+    def __init__(self, access_data):
         """
         Initialize an OracleConnection object
 
@@ -94,30 +94,30 @@ class OracleConnection (cx_Oracle.Connection):
 
         """
         cx_args = {}
-        user = access_data ['user']
-        pswd = access_data ['passwd']
+        user = access_data['user']
+        pswd = access_data['passwd']
 
-        kwargs = {'host': access_data ['server'], 'port': access_data ['port']}
+        kwargs = {'host': access_data['server'], 'port': access_data['port']}
 
         # Take SID first as specified by DESDM-3.
-        if access_data.get ('sid', None):
-            kwargs ['sid'] = access_data ['sid']
-        elif access_data.get ('name', None):
-            kwargs ['service_name'] = access_data ['name']
+        if access_data.get('sid', None):
+            kwargs['sid'] = access_data['sid']
+        elif access_data.get('name', None):
+            kwargs['service_name'] = access_data['name']
         else:
-            raise errors.MissingDBId ()
+            raise errors.MissingDBId()
         if access_data.get('service', None):
             kwargs['service'] = access_data['service']
         if 'sid' in kwargs:
-            cdt = "(SID=%s)" % kwargs ['sid']
+            cdt = "(SID=%s)" % kwargs['sid']
         else:
-            cdt = "(SERVICE_NAME=%s)" % kwargs ['service_name']
+            cdt = "(SERVICE_NAME=%s)" % kwargs['service_name']
         if 'service' in kwargs:
             cdt += '(SERVER=%s)' % kwargs['service']
             cx_args['cclass'] = 'DESDM'
             cx_args['purity'] = cx_Oracle.ATTR_PURITY_SELF
         dsn = ("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%s))"
-               "(CONNECT_DATA=%s))") % (kwargs['host'], kwargs['port'], cdt)
+               "(CONNECT_DATA=%s))") %(kwargs['host'], kwargs['port'], cdt)
         if access_data.get('threaded', None):
             cx_args['threaded'] = True
 
@@ -126,34 +126,33 @@ class OracleConnection (cx_Oracle.Connection):
         #miscutils.fwdebug(3, "CXORACLE_DEBUG", "dsn = %s" % dsn)
         miscutils.fwdebug(3, "CXORACLE_DEBUG", str(cx_args))
         try:
-            #cx_Oracle.Connection.__init__ (self, user=user, password=pswd,
+            #cx_Oracle.Connection.__init__(self, user=user, password=pswd,
             #                               dsn=dsn, module = _MODULE_NAME)
-            cx_Oracle.Connection.__init__ (self, user=user, password=pswd, **cx_args)
+            cx_Oracle.Connection.__init__(self, user=user, password=pswd, **cx_args)
         except TypeError as exc:
-            if str (exc.message).startswith ("'module' is an invalid keyword"):
-                warnings.warn ('Cannot set module name; cx_Oracle upgrade '
-                               'recommended.')
+            if str(exc.message).startswith("'module' is an invalid keyword"):
+                warnings.warn('Cannot set module name; cx_Oracle upgrade recommended.')
                 del cx_args['module']
-                cx_Oracle.Connection.__init__ (self, user=user, password=pswd, **cx_args)
-                #cx_Oracle.Connection.__init__ (self, user=user, password=pswd,
+                cx_Oracle.Connection.__init__(self, user=user, password=pswd, **cx_args)
+                #cx_Oracle.Connection.__init__(self, user=user, password=pswd,
                 #                               dsn=dsn)
             else:
                 raise
         self.module = _MODULE_NAME
 
-    def cursor (self, fetchsize = None):
+    def cursor(self, fetchsize=None):
         """
         Return a cx_Oracle Cursor object for operating on the connection.
 
         The fetchsize argument is ignored, but retained for compatibility
         with other connection types.
         """
-
+        #pylint: disable=unused-argument
         # cx_Oracle doesn't implement/need named cursors, so ignore fetchsize.
 
-        return cx_Oracle.Connection.cursor (self)
+        return cx_Oracle.Connection.cursor(self)
 
-    def get_column_types (self, table_name):
+    def get_column_types(self, table_name):
         """
         Return a dictionary of python types indexed by column name for a table.
         """
@@ -161,28 +160,28 @@ class OracleConnection (cx_Oracle.Connection):
         curs = self.cursor()
         curs.execute('SELECT * FROM %s WHERE 0=1' % table_name)
 
-        types = {d [0].lower (): _TYPE_MAP [d [1]] for d in curs.description}
+        types = {d[0].lower(): _TYPE_MAP[d[1]] for d in curs.description}
 
         curs.close()
 
         return types
 
-    def get_expr_exec_format (self):
-        "Return a format string for a statement to execute SQL expressions."
+    def get_expr_exec_format(self):
+        """Return a format string for a statement to execute SQL expressions."""
 
         return 'SELECT %s FROM DUAL'
 
-    def get_named_bind_string (self, name):
-        "Return a named bind (substitution) string for name with cx_Oracle."
+    def get_named_bind_string(self, name):
+        """Return a named bind(substitution) string for name with cx_Oracle."""
 
         return ":" + name
 
-    def get_positional_bind_string (self, pos=1):
-        "Return a positional bind (substitution) string for cx_Oracle."
+    def get_positional_bind_string(self, pos=1):
+        """Return a positional bind(substitution) string for cx_Oracle."""
 
         return ":%d" % pos
 
-    def get_regex_format (self, case_sensitive = True):
+    def get_regex_format(self, case_sensitive=True):
         """
         Return a format string for constructing a regular expression clause.
 
@@ -196,51 +195,54 @@ class OracleConnection (cx_Oracle.Connection):
         elif case_sensitive is None:
             param = '' # Leave it up to the database to decide
         else:
-            raise errors.UnknownCaseSensitiveError (value = case_sensitive)
+            raise errors.UnknownCaseSensitiveError(value=case_sensitive)
 
-        return "REGEXP_LIKE (%%(target)s, %%(pattern)s%s)" % param
+        return "REGEXP_LIKE(%%(target)s, %%(pattern)s%s)" % param
 
-    def get_seq_next_clause (self, seqname):
-        "Return an SQL expression that extracts the next value from a sequence."
+    def get_seq_next_clause(self, seqname):
+        """Return an SQL expression that extracts the next value from a sequence."""
 
         return seqname + '.NEXTVAL'
 
-    def sequence_drop (self, seq_name):
-        "Drop sequence; do not generate error if it doesn't exist."
+    def sequence_drop(self, seq_name):
+        """Drop sequence; do not generate error if it doesn't exist."""
 
         stmt = 'DROP SEQUENCE %s' % seq_name
 
-        curs = self.cursor ()
+        curs = self.cursor()
         try:
-            curs.execute (stmt)
+            curs.execute(stmt)
         except cx_Oracle.DatabaseError as exc:
-            if exc.args [0].code != _ORA_NO_SEQUENCE:
+            if exc.args[0].code != _ORA_NO_SEQUENCE:
                 raise
         finally:
-            curs.close ()
+            curs.close()
 
-    def table_drop (self, table):
-        "Drop table; do not generate error if it doesn't exist."
+    def table_drop(self, table):
+        """Drop table; do not generate error if it doesn't exist."""
 
         stmt = 'DROP TABLE %s' % table
 
-        curs = self.cursor ()
+        curs = self.cursor()
         try:
-            curs.execute (stmt)
+            curs.execute(stmt)
         except cx_Oracle.DatabaseError as exc:
-            if exc.args [0].code != _ORA_NO_TABLE_VIEW:
+            if exc.args[0].code != _ORA_NO_TABLE_VIEW:
                 raise
         finally:
-            curs.close ()
+            curs.close()
 
-    def from_dual (self):
+    def from_dual(self):
+        """ doc """
         return "from dual"
 
-    def get_current_timestamp_str (self):
+    def get_current_timestamp_str(self):
+        """ doc """
         return "SYSTIMESTAMP"
 
 
     def ping(self):
+        """ doc """
         try:
             curs = self.cursor()
             curs.execute('select 1 from dual')
