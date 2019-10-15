@@ -5,3 +5,7 @@
 tests/sql/
 
 tests/test_test.py
+
+.coverage
+
+coverage.xml
