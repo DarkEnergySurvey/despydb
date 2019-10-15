@@ -205,6 +205,46 @@ class DesDbi (object):
         """
         return self.con.cursor(fetchsize)
 
+    def exec_sql_expression (self, expression):
+        """
+        Execute an SQL expression or expressions.
+
+        Construct and execute an SQL statement from a string containing an SQL
+        expression or a list of such strings.  Return a sequence containing a
+        result for each column.
+        """
+        if hasattr (expression, '__iter__'):
+            s = ','.join (expression)
+        else:
+            s = expression
+
+        stmt = self.get_expr_exec_format () % s
+        cursor = self.cursor ()
+        cursor.execute (stmt)
+        res = cursor.fetchone ()
+        cursor.close ()
+        return res
+
+
+    def get_expr_exec_format (self):
+        """
+        Return a format string for a statement to execute SQL expressions.
+
+        The returned format string contains a single unnamed python subsitution
+        string that expects a string containing the expressions to be executed.
+        Once the expressions have been substituted into the string, the
+        resulting SQL statement may be executed.
+
+        Examples:
+            expression:      con.get_expr_exec_format()
+            oracle result:   SELECT %s FROM DUAL
+            postgres result: SELECT %s
+
+            expression:      con.get_expr_exec_format() % 'func1(), func2()'
+            oracle result:   SELECT func1(), func2() FROM DUAL
+            postgres result: SELECT func1(), func2()
+        """
+        return self.con.get_expr_exec_format()
 
     def get_column_metadata(self, table_name):
         """
