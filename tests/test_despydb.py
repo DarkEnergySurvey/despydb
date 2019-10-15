@@ -9,24 +9,36 @@ import despydb.errors as errors
 class TestErrors(unittest.TestCase):
     def test_missingDBid(self):
         msg = 'Bad identifier.'
-        exc = errors.MissingDBId()
-        self.assertTrue('No database' in exc.args[0])
-        exc = errors.MissingDBId(msg)
-        self.assertEqual(msg, exc.args[0])
+        try:
+            raise errors.MissingDBId()
+        except errors.MissingDBId as exc:
+            self.assertTrue('No database' in exc.args[0])
+        try:
+            raise errors.MissingDBId(msg)
+        except errors.MissingDBId as exc:
+            self.assertEqual(msg, exc.args[0])
 
     def test_unknownDBTypeError(self):
         msg = 'Unknown DB type'
-        exc = errors.UnknownDBTypeError('xyz')
-        self.assertTrue('xyz' in exc.args[0])
-        exc = errors.UnknownDBTypeError('xyz', msg)
-        self.assertEqual(exc.args[0], msg)
+        try:
+            raise errors.UnknownDBTypeError('xyz')
+        except errors.UnknownDBTypeError as exc:
+            self.assertTrue('xyz' in exc.args[0])
+        try:
+            raise errors.UnknownDBTypeError('xyz', msg)
+        except errors.UnknownDBTypeError as exc:
+            self.assertEqual(exc.args[0], msg)
 
     def test_unknownCaseSensitiveError(self):
         msg = 'Bad case value'
-        exc = errors.UnknownCaseSensitiveError('xyz')
-        self.assertTrue('xyz' in exc.args[0])
-        exc = errors.UnknownCaseSensitiveError('xyz', msg)
-        self.assertEqual(exc.args[0], msg)
+        try:
+            raise errors.UnknownCaseSensitiveError('xyz')
+        except errors.UnknownCaseSensitiveError as exc:
+            self.assertTrue('xyz' in exc.args[0])
+        try:
+            raise errors.UnknownCaseSensitiveError('xyz', msg)
+        except errors.UnknownCaseSensitiveError as exc:
+            self.assertEqual(exc.args[0], msg)
 
 #class TestOracon(unittest.TestCase):
 #    @patch('despydb.oracon.cx_Oracle')
