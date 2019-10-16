@@ -79,20 +79,30 @@ _ORA_NO_TABLE_VIEW = 942    # table or view does not exist
 _ORA_NO_SEQUENCE = 2289   # sequence does not exist
 
 class OracleConnection(cx_Oracle.Connection):
-    """
-    Provide cx_Oracle-specific implementations of canonical database methods
-
-    Refer to desdbi.py for full method documentation.
-    """
-
-    def __init__(self, access_data, runningTest=False):
-        """
-        Initialize an OracleConnection object
-
+    """ Provide cx_Oracle-specific implementations of canonical database methods.
         Connect the OracleConnection instance to the database identified in
         access_data.
 
-        """
+        Parameters
+        ----------
+        access_data : dict
+            Dictionary of the parameters used to create the connection. Parameters
+            are:
+
+            * user - the user name
+            * passwd - the user's password
+            * server - the URL or IP of the Oracle server to use
+            * port - the port to use
+            * sid or name - the identity of the database to use
+            * service - (optional) a special service to use
+            * threaded - (optional) whether to create a thread safe connection
+
+        runningTest : bool, optional
+            Only used when running tests ans actual connections are not made
+
+    """
+
+    def __init__(self, access_data, runningTest=False):
         self.runningTest = runningTest
         cx_args = {}
         user = access_data['user']
@@ -148,20 +158,33 @@ class OracleConnection(cx_Oracle.Connection):
             self.module = _MODULE_NAME
 
     def cursor(self, fetchsize=None):
-        """
-        Return a cx_Oracle Cursor object for operating on the connection.
+        """ Return a cx_Oracle Cursor object for operating on the connection.
 
-        The fetchsize argument is ignored, but retained for compatibility
-        with other connection types.
+            The fetchsize argument is ignored, but retained for compatibility
+            with other connection types.
+
+            Returns
+            -------
+            cx_Oracle.cursor
+                Cursor for use with the database.
         """
         #pylint: disable=unused-argument
         # cx_Oracle doesn't implement/need named cursors, so ignore fetchsize.
-
         return cx_Oracle.Connection.cursor(self)
 
     def get_column_types(self, table_name):
-        """
-        Return a dictionary of python types indexed by column name for a table.
+        """ Return a dictionary of python types indexed by column name for a table.
+
+            Parameters
+            ----------
+            table_name : str
+                The name of the table for which the column data are retrieved.
+
+            Returns
+            -------
+            dict
+                Dictionary of column names and their data type as the key/value
+                pairs.
         """
 
         curs = self.cursor()
@@ -174,25 +197,66 @@ class OracleConnection(cx_Oracle.Connection):
         return types
 
     def get_expr_exec_format(self):
-        """Return a format string for a statement to execute SQL expressions."""
+        """ Return a format string for a statement to execute SQL expressions.
+
+            Returns
+            -------
+            str
+                The format string.
+        """
 
         return 'SELECT %s FROM DUAL'
 
     def get_named_bind_string(self, name):
-        """Return a named bind(substitution) string for name with cx_Oracle."""
+        """ Return a named bind(substitution) string for name with cx_Oracle.
+
+            Parameters
+            ----------
+            name : str
+                The name to use as the binding.
+
+            Returns
+            -------
+            str
+                The properly formatted binding string.
+        """
 
         return ":" + name
 
     def get_positional_bind_string(self, pos=1):
-        """Return a positional bind(substitution) string for cx_Oracle."""
+        """ Return a positional bind(substitution) string for cx_Oracle.
+
+            Parameters
+            ----------
+            pos : int, optional
+                The position number to use in the binding, default is 1
+
+            Returns
+            -------
+            str
+                The properly formatted binding string.
+        """
 
         return ":%d" % pos
 
     def get_regex_format(self, case_sensitive=True):
-        """
-        Return a format string for constructing a regular expression clause.
+        """ Return a format string for constructing a regular expression clause.
 
-        See DesDbi class for detailed documentation.
+            Parameters
+            ----------
+            case_sensitive : bool, optional
+                Whenther or not the regex is to be case sensitive (True), or not (False).
+                Default is True, None can be used to let the DB decide what to use.
+
+            Returns
+            -------
+            str
+                Format string for a regular expression
+
+            Raises
+            ------
+            errors.UnknownCaseSensitiveError
+                If an unknown value for case_sensitive is given.
         """
 
         if case_sensitive is True:
@@ -207,12 +271,30 @@ class OracleConnection(cx_Oracle.Connection):
         return "REGEXP_LIKE(%%(target)s, %%(pattern)s%s)" % param
 
     def get_seq_next_clause(self, seqname):
-        """Return an SQL expression that extracts the next value from a sequence."""
+        """ Return an SQL expression that extracts the next value from a sequence.
+
+            Parameters
+            ----------
+            seqname : str
+                The name of the sequence to get the next value for.
+
+            Returns
+            -------
+            str
+                Expression to obtain the next sequence value.
+        """
 
         return seqname + '.NEXTVAL'
 
     def sequence_drop(self, seq_name):
-        """Drop sequence; do not generate error if it doesn't exist."""
+        """ Drop sequence; do not generate error if it doesn't exist.
+
+            Parameters
+            ----------
+            seq_name : str
+                The name of the sequence to drop
+
+        """
 
         stmt = 'DROP SEQUENCE %s' % seq_name
 
@@ -226,7 +308,13 @@ class OracleConnection(cx_Oracle.Connection):
             curs.close()
 
     def table_drop(self, table):
-        """Drop table; do not generate error if it doesn't exist."""
+        """ Drop a table; do not generate error if it doesn't exist.
+
+            Parameters
+            ----------
+            table : str
+                The name of the table to drop.
+        """
 
         stmt = 'DROP TABLE %s' % table
 
@@ -240,16 +328,34 @@ class OracleConnection(cx_Oracle.Connection):
             curs.close()
 
     def from_dual(self):
-        """ doc """
+        """ Return the proper format for selecting something from DUAL
+
+            Returns
+            -------
+            str
+                The proper DUAL format.
+        """
         return "from dual"
 
     def get_current_timestamp_str(self):
-        """ doc """
+        """ Returns the Oracle specific method name for getting the current time stamp.
+
+            Returns
+            -------
+            str
+                The method name.
+        """
         return "SYSTIMESTAMP"
 
 
     def ping(self):
-        """ doc """
+        """ Ping the database to make sure the connection is still alive
+
+            Returns
+            -------
+            bool
+                True if the connection is still alive, False otherwise.
+        """
         try:
             curs = self.cursor()
             curs.execute('select 1 from dual')
