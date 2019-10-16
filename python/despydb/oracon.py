@@ -25,7 +25,6 @@ __version__ = "$Rev: 48541 $"
 
 import datetime
 import socket
-import warnings
 
 import cx_Oracle
 
@@ -102,8 +101,7 @@ class OracleConnection(cx_Oracle.Connection):
 
     """
 
-    def __init__(self, access_data, runningTest=False):
-        self.runningTest = runningTest
+    def __init__(self, access_data):
         cx_args = {}
         user = access_data['user']
         pswd = access_data['passwd']
@@ -136,26 +134,9 @@ class OracleConnection(cx_Oracle.Connection):
 
         #miscutils.fwdebug(3, "CXORACLE_DEBUG", "dsn = %s" % dsn)
         miscutils.fwdebug(3, "CXORACLE_DEBUG", str(cx_args))
-        try:
-            #cx_Oracle.Connection.__init__(self, user=user, password=pswd,
-            #                               dsn=dsn, module = _MODULE_NAME)
-            cx_Oracle.Connection.__init__(self, user=user, password=pswd, **cx_args)
-        except TypeError as exc:
-            if str(exc.message).startswith("'module' is an invalid keyword"):
-                warnings.warn('Cannot set module name; cx_Oracle upgrade recommended.')
-                del cx_args['module']
-                cx_Oracle.Connection.__init__(self, user=user, password=pswd, **cx_args)
-                #cx_Oracle.Connection.__init__(self, user=user, password=pswd,
-                #                               dsn=dsn)
-            else:
-                raise
-        except cx_Oracle.DatabaseError: # internally catch exceptions for testing
-            if self.runningTest:
-                pass
-            else:
-                raise
-        else:
-            self.module = _MODULE_NAME
+        cx_Oracle.Connection.__init__(self, user=user, password=pswd, **cx_args)
+
+        self.module = _MODULE_NAME
 
     def cursor(self, fetchsize=None):
         """ Return a cx_Oracle Cursor object for operating on the connection.
