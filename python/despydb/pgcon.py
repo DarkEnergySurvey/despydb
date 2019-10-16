@@ -29,7 +29,6 @@ import random
 
 import psycopg2
 import psycopg2.errorcodes
-from psycopg2.extensions import connection as pgConnection
 
 import despydb.errors as errors
 
@@ -73,7 +72,7 @@ def _make_type_map():
         if ptype:
             _TYPE_MAP[code] = ptype
 
-class PostgresConnection(pgConnection):
+class PostgresConnection(psycopg2.extensions.connection):
     """ Provide psycopg2-specific implementations of canonical database methods
         Connect the PostgresConnection instance to the database identified in
         access_data.
@@ -106,7 +105,7 @@ class PostgresConnection(pgConnection):
                                                                  access_data['passwd'],
                                                                  access_data['port'])
 
-        pgConnection.__init__(self, dsn)
+        psycopg2.extensions.connection.__init__(self, dsn)
 
     def cursor(self, fetchsize=None):
         """ Return a psycopg2 Cursor object for operating on the connection.
@@ -129,7 +128,7 @@ class PostgresConnection(pgConnection):
             #curs.itersize = fetchsize
             raise NotImplementedError('Need algorithm for unique cursor name.')
         else:
-            curs = pgConnection.cursor(self)
+            curs = psycopg2.extensions.connection.cursor(self)
 
         return curs
 
