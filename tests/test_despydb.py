@@ -5,7 +5,7 @@ from mock import patch
 
 import despydb.oracon as ora
 import despydb.errors as errors
-import cx_Oracle as cxo
+#import cx_Oracle as cxo
 
 def raiseMissing():
     raise errors.MissingDBId()
@@ -53,32 +53,31 @@ class TestOracon(unittest.TestCase):
         #with patch('despydb.oracon.cx_Oracle') as ocx:
         #    with patch('despydb.oracon.cx_Oracle.Connection') as occ:
         with self.assertRaises(errors.MissingDBId):
-            _ = ora.OracleConnection(data)
+            _ = ora.OracleConnection(data, True)
 
         data['name'] = 'myDB'
-        with self.assertRaises(cxo.DatabaseError):
-            _ = ora.OracleConnection(data)
+        _ = ora.OracleConnection(data, True)
 
         data['sid'] = 123456
-        with self.assertRaises(cxo.DatabaseError):
-            _ = ora.OracleConnection(data)
+        _ = ora.OracleConnection(data, True)
 
         data['service'] = 'non-service'
-        with self.assertRaises(cxo.DatabaseError):
-            _ = ora.OracleConnection(data)
+        _ = ora.OracleConnection(data, True)
 
         data['threaded'] = True
-        with self.assertRaises(cxo.DatabaseError):
-            _ = ora.OracleConnection(data)
+        _ = ora.OracleConnection(data, True)
 
-        with patch('despydb.oracon.cx_Oracle.Connection', side_effect=TypeError("'module' is an invalid keyword")) as ptch:
-            try:
-                _ = ora.OracleConnection(data)
-            except cxo.InterfaceError:
-                pass
+        #with patch('despydb.oracon.cx_Oracle.Connection', side_effect=TypeError("'module' is an invalid keyword")) as ptch:
+        #    try:
+        #        _ = ora.OracleConnection(data)
+        #    except cxo.InterfaceError:
+        #        pass
 
-        with patch('despydb.oracon.cx_Oracle.Connection', side_effect=TypeError('')) as ptch:
-            try:
-                _ = ora.OracleConnection(data)
-            except cxo.InterfaceError:
-                pass
+        #with patch('despydb.oracon.cx_Oracle.Connection', side_effect=TypeError('')) as ptch:
+        #    try:
+        #        _ = ora.OracleConnection(data)
+        #    except cxo.InterfaceError:
+        #        pass
+
+if __name__ == '__main__':
+    unittest.main()

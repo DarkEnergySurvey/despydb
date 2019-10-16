@@ -85,7 +85,7 @@ class OracleConnection(cx_Oracle.Connection):
     Refer to desdbi.py for full method documentation.
     """
 
-    def __init__(self, access_data):
+    def __init__(self, access_data, runningTest=False):
         """
         Initialize an OracleConnection object
 
@@ -93,6 +93,7 @@ class OracleConnection(cx_Oracle.Connection):
         access_data.
 
         """
+        self.runningTest = runningTest
         cx_args = {}
         user = access_data['user']
         pswd = access_data['passwd']
@@ -138,7 +139,13 @@ class OracleConnection(cx_Oracle.Connection):
                 #                               dsn=dsn)
             else:
                 raise
-        self.module = _MODULE_NAME
+        except cx_Oracle.DatabaseError: # internally catch exceptions for testing
+            if self.runningTest:
+                pass
+            else:
+                raise
+        else:
+            self.module = _MODULE_NAME
 
     def cursor(self, fetchsize=None):
         """
