@@ -1,6 +1,8 @@
 """
     Module for mocking a des db connection
 """
+# pylint: skip-file
+
 import sqlite3
 
 import datetime
