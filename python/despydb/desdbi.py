@@ -35,44 +35,59 @@ import despydb.errors as errors
 import despydb.desdbi_defs as defs
 
 class DesDbi(object):
-    """
-    Provide a dialect-neutral interface to a DES database.
+    """ Provide a dialect-neutral interface to a DES database.
 
-    During Instantiation of this class, service access parameters are found and
-    a connection opened to the database identified.  The resulting object
-    exposes several methods from an implementation of a python DB API
-    Connection class determined by the service access parameters.  In addition,
-    the object provides several methods that allow callers to construct SQL
-    statements and to interact with the database without dialect-specific code.
+        During Instantiation of this class, service access parameters are found and
+        a connection opened to the database identified.  The resulting object
+        exposes several methods from an implementation of a python DB API
+        Connection class determined by the service access parameters.  In addition,
+        the object provides several methods that allow callers to construct SQL
+        statements and to interact with the database without dialect-specific code.
 
-    This class may be used as a context manager whereupon it will automatically
-    close the database connection after either commiting the transaction if the
-    context is exited without an exception or rolling back the transaction
-    otherwise.
+        This class may be used as a context manager whereupon it will automatically
+        close the database connection after either commiting the transaction if the
+        context is exited without an exception or rolling back the transaction
+        otherwise.
 
-    As an example of context manager usage, the following code will open a
-    database connection, insert two rows into my_table, print the contents of
-    my_table after the insert, commit the insert, and close the connection
-    unless some sort of error happens:
+        As an example of context manager usage, the following code will open a
+        database connection, insert two rows into my_table, print the contents of
+        my_table after the insert, commit the insert, and close the connection
+        unless some sort of error happens:
 
-        with coreutils.DesDbi() as dbh:
-            dbh.insert_many('my_table', ['col1', 'col2'], [(1,1),(2,2)])
-            print dbh.query_simple('my_table')
+            with coreutils.DesDbi() as dbh:
+                dbh.insert_many('my_table', ['col1', 'col2'], [(1,1),(2,2)])
+                print dbh.query_simple('my_table')
 
-    If the insert fails, the transaction will be rolled back and the connection
-    closed without an attempt query the table.
-    """
-
-    def __init__(self, desfile=None, section=None, retry=False, connection=None, threaded=False):
-        """
-        Create an interface object for a DES database.
+        If the insert fails, the transaction will be rolled back and the connection
+        closed without an attempt query the table.
 
         The DES services file and/or section contained therein may be specified
         via the desfile and section arguments.  When omitted default values
         will be used as defined in DESDM-3.  A tag of "db" will be used in all
         cases.
 
-        """
+        Parameters
+        ----------
+        desfile : str, optional
+            The file to use for the services data, default is None.
+
+        section : str, optional
+            The section of the services file to use. Default is None
+
+        retry : bool, optional
+            Whether to retry when reading the services file and when connecting
+            to the database, if errors are encountered. Default is False.
+
+        connection : database handle, optional
+            A database connection to use rather than creating a new one. Default
+            is None.
+
+        threaded : bool, optional
+            Whether to use a thread safe connection or not. Default is False, no
+            thread safety.
+    """
+
+    def __init__(self, desfile=None, section=None, retry=False, connection=None, threaded=False):
         self.retry = retry
         if connection is None:
             self.inherit = False
@@ -124,7 +139,7 @@ class DesDbi(object):
         return False
 
     def connect(self):
-        """ doc
+        """ Connect to the database, retrying if requested.
         """
         MAXTRIES = 1
         if self.retry:
@@ -158,7 +173,7 @@ class DesDbi(object):
             print "Successfully connected to database after retrying."
 
     def reconnect(self):
-        """ doc
+        """ Reconnect to the database (but ony if the connection is no longer live).
         """
         if not self.ping():
             self.connect()
@@ -166,13 +181,18 @@ class DesDbi(object):
             print 'Connection still good, not reconnecting'
 
     def autocommit(self, state=None):
-        """
-        Return and optionally set autocommit mode.
+        """ Return and optionally set autocommit mode.
 
-        If provided state is Boolean, set connection's autocommit mode
-        accordingly.
+            Parameters
+            ----------
+            state : various, optional
+                If state is a Boolean, then set connection's autocommit mode
+                accordingly. Default is None.
 
-        Return autocommit mode prior to any change.
+            Returns
+            -------
+            bool
+                The autocommit mode prior to any change.
         """
         a = self.con.autocommit
 
@@ -182,36 +202,39 @@ class DesDbi(object):
         return a
 
     def close(self):
-        """
-        Close the current connection, disabling any open cursors.
+        """ Close the current connection, disabling any open cursors.
         """
         return self.con.close()
 
     def commit(self):
-        """
-        Commit any pending transaction.
+        """ Commit any pending transaction.
         """
         return self.con.commit()
 
     def cursor(self, fetchsize=None):
-        """
-        Return a Cursor object for operating on the connection.
+        """ Return a Cursor object for operating on the connection.
 
-        The not yet implemented fetchsize argument would cause PostgreConnection
-        to generate a psycopg2 named cursor configured to fetch the indicated
-        number of rows from the database per request needed to fulfill the
-        requirements of calls to fetchall(), fetchone(), and fetchmany().  It's
-        default behavior is to fetch all rows from the database at once.
+            The not yet implemented fetchsize argument would cause PostgreConnection
+            to generate a psycopg2 named cursor configured to fetch the indicated
+            number of rows from the database per request needed to fulfill the
+            requirements of calls to fetchall(), fetchone(), and fetchmany().  It's
+            default behavior is to fetch all rows from the database at once.
         """
         return self.con.cursor(fetchsize)
 
     def exec_sql_expression(self, expression):
-        """
-        Execute an SQL expression or expressions.
+        """ Execute an SQL expression or expressions.
 
-        Construct and execute an SQL statement from a string containing an SQL
-        expression or a list of such strings.  Return a sequence containing a
-        result for each column.
+            Parameters
+            ----------
+            expression : various
+                Construct and execute an SQL statement from a string containing an SQL
+                expression or a list of such strings.
+
+            Returns
+            -------
+            tuple
+                A tuple containing a single result for each column.
         """
         if hasattr(expression, '__iter__'):
             s = ','.join(expression)
@@ -227,31 +250,42 @@ class DesDbi(object):
 
 
     def get_expr_exec_format(self):
-        """
-        Return a format string for a statement to execute SQL expressions.
+        """ Return a format string for a statement to execute SQL expressions.
 
-        The returned format string contains a single unnamed python subsitution
-        string that expects a string containing the expressions to be executed.
-        Once the expressions have been substituted into the string, the
-        resulting SQL statement may be executed.
+            The returned format string contains a single unnamed python subsitution
+            string that expects a string containing the expressions to be executed.
+            Once the expressions have been substituted into the string, the
+            resulting SQL statement may be executed.
 
-        Examples:
-            expression:      con.get_expr_exec_format()
-            oracle result:   SELECT %s FROM DUAL
-            postgres result: SELECT %s
+            Returns
+            -------
+            str
 
-            expression:      con.get_expr_exec_format() % 'func1(), func2()'
-            oracle result:   SELECT func1(), func2() FROM DUAL
-            postgres result: SELECT func1(), func2()
+            Examples:
+                expression:      con.get_expr_exec_format()
+                oracle result:   SELECT %s FROM DUAL
+                postgres result: SELECT %s
+
+                expression:      con.get_expr_exec_format() % 'func1(), func2()'
+                oracle result:   SELECT func1(), func2() FROM DUAL
+                postgres result: SELECT func1(), func2()
         """
         return self.con.get_expr_exec_format()
 
     def get_column_metadata(self, table_name):
-        """
-        Return a dictionary of 7-item sequences, with lower case column name keys.
-        The sequence values are:
-       (name, type, display_size, internal_size, precision, scale, null_ok)
-        Constants are defined for the sequence indexes in coreutils_defs.py
+        """ Return a dictionary of 7-item sequences, with lower case column name keys.
+            The sequence values are:
+            (name, type, display_size, internal_size, precision, scale, null_ok)
+            Constants are defined for the sequence indexes in coreutils_defs.py
+
+            Parameters
+            ----------
+            table_name : str
+                The table whose information needs to be looked up.
+
+            Returns
+            -------
+            dict
         """
         cursor = self.cursor()
         sqlstr = 'SELECT * FROM %s WHERE 0=1' % table_name
@@ -268,8 +302,16 @@ class DesDbi(object):
         return retval
 
     def get_column_lengths(self, table_name):
-        """
-        Return a dictionary of column_name = column_length for the given table
+        """ Return a dictionary of column_name = column_length for the given table
+
+            Parameters
+            ----------
+            table_name : str
+                The table whose information needs to be looked up.
+
+            Returns
+            -------
+            dict
         """
         meta = self.get_column_metadata(table_name)
         res = {}
@@ -279,74 +321,120 @@ class DesDbi(object):
 
 
     def get_column_names(self, table_name):
-        """
-        Return a sequence containing the column names of specified table.
+        """ Return a sequence containing the column names of specified table.
 
-        Column names are converted to lowercase.
+            Parameters
+            ----------
+            table_name : str
+                The table whose information needs to be looked up.
+
+            Returns
+            -------
+            dict
         """
         meta = self.get_column_metadata(table_name)
         column_names = [d[0].lower() for d in meta.values()]
         return column_names
 
     def get_column_types(self, table_name):
-        """
-        Return a dictionary of python types indexed by column name for a table.
+        """ Return a dictionary of python types indexed by column name for a table.
+
+            Parameters
+            ----------
+            table_name : str
+                The table whose information needs to be looked up.
+
+            Returns
+            -------
+            dict
         """
         return self.con.get_column_types(table_name)
 
 
     def get_named_bind_string(self, name):
-        """
-        Return a named bind(substitution) string.
+        """ Return a named bind(substitution) string.
 
-        Returns a dialect-specific bind string for use with SQL statement
-        arguments specified by name.
+            Returns a dialect-specific bind string for use with SQL statement
+            arguments specified by name.
 
-        Examples:
-            expression:      get_named_bind_string('abc')
-            oracle result:   :abc
-            postgres result: %(abc)s
+            Parameters
+            ----------
+            name : str
+                The name of the parameter to bind.
+
+            Returns
+            -------
+            str
+
+            Examples:
+                expression:      get_named_bind_string('abc')
+                oracle result:   :abc
+                postgres result: %(abc)s
         """
         return self.con.get_named_bind_string(name)
 
     def get_positional_bind_string(self, pos=1):
-        """
-        Return a positional bind(substitution) string.
+        """ Return a positional bind(substitution) string.
 
-        Returns a dialect-specific bind string for use with SQL statement
-        arguments specified by position.
+            Returns a dialect-specific bind string for use with SQL statement
+            arguments specified by position.
 
-        Examples:
-            expression:      get_positional_bind_string()
-            oracle result:   :1
-            postgres result: %s
+            Parameters
+            ----------
+            pos : int, optional
+                The number of the position to bind.
+
+            Returns
+            -------
+            str
+
+            Examples:
+                expression:      get_positional_bind_string()
+                oracle result:   :1
+                postgres result: %s
         """
         return self.con.get_positional_bind_string(pos)
 
     def get_regex_clause(self, target, pattern, case_sensitive=True):
-        """
-        Return a dialect-specific regular expression matching clause.
+        """ Return a dialect-specific regular expression matching clause.
 
-        Construct a dialect-specific SQL Boolean expression that matches a
-        provided target with a provided regular expression string.  The target
-        is assumed to be a column name or bind expression so it is not quoted
-        while the pattern is assumed to be a string, so it is quoted.
+            Construct a dialect-specific SQL Boolean expression that matches a
+            provided target with a provided regular expression string.  The target
+            is assumed to be a column name or bind expression so it is not quoted
+            while the pattern is assumed to be a string, so it is quoted.
 
-        Case sensitivity of matching can be controlled.  When case_sensitive is
-        None, the Oracle implementation will defer to the database default
-        settings.
+            Case sensitivity of matching can be controlled.  When case_sensitive is
+            None, the Oracle implementation will defer to the database default
+            settings.
 
-        For a more flexible interface, refer to get_regex_format().
+            For a more flexible interface, refer to get_regex_format().
 
-        Examples:
-            expression:      get_regex_clause("col1", "pre.*suf")
-            oracle result:   REGEXP_LIKE(col1, 'pre.*suf')
-            postgres result:(col1 ~ 'pre.*suf')
+            Parameters
+            ----------
+            target : str
+                the target of the binding
 
-            expression:      get_regex_clause(get_positional_bind_string(),
-                                               "prefix.*")
-            oracle result:   REGEXP_LIKE(:1, 'prefix.*')
-            postgres result:(%s ~ 'prefix.*')
+            pattern : str
+                The regex pattern to use.
+
+            case_sensitive : bool, optional
+                Whether the expression should be case sensitive. Default is True,
+                expression is case sensitive.
+
+            Returns
+            -------
+            str
+                The constructed regex
+
+            Examples:
+                expression:      get_regex_clause("col1", "pre.*suf")
+                oracle result:   REGEXP_LIKE(col1, 'pre.*suf')
+                postgres result:(col1 ~ 'pre.*suf')
+
+                expression:      get_regex_clause(get_positional_bind_string(),
+                                                   "prefix.*")
+                oracle result:   REGEXP_LIKE(:1, 'prefix.*')
+                postgres result:(%s ~ 'prefix.*')
         """
         d = {'target' : target,
              'pattern': "'" + pattern + "'"}
@@ -354,82 +442,114 @@ class DesDbi(object):
         return self.get_regex_format(case_sensitive) % d
 
     def get_regex_format(self, case_sensitive=True):
-        """
-        Return a format string for constructing a regular expression clause.
+        """ Return a format string for constructing a regular expression clause.
 
-        The returned format string contains two python named-substitution
-        strings:
-            target  -- expects string indicating value to compare to
-            pattern -- expects string indicating the regular expression
-        The value for both should be exactly what is desired in the SQL
-        expression which means, for example, that if the regular expression is
-        a explicit string rather than a bind string, it should contain the
-        single quotes required for strings in SQL.
+            The returned format string contains two python named-substitution
+            strings:
+                target  -- expects string indicating value to compare to
+                pattern -- expects string indicating the regular expression
+            The value for both should be exactly what is desired in the SQL
+            expression which means, for example, that if the regular expression is
+            a explicit string rather than a bind string, it should contain the
+            single quotes required for strings in SQL.
 
-        When working with constant regular expressions, the get_regex_clause()
-        is easier to use.
+            When working with constant regular expressions, the get_regex_clause()
+            is easier to use.
 
-        Examples:
-            expression:      get_regex_format()
-            oracle result:   REGEXP_LIKE(%(target)s, %(pattern)s)
-            postgres result: %(target)s ~ %(pattern)s
+            Parameters
+            ----------
+            case_sensitive : bool, optional
+                Whether the expression should be case sensitive. Default is True,
+                expression is case sensitive.
 
-            expression:      get_regex_format() % {"target": "col1",
-                                                    "pattern": "'pre.*suf'"}
-            oracle result:   REGEXP_LIKE(col1, 'pre.*suf', 'c')
-            postgres result:(col1 ~ 'pre.*suf')
+            Returns
+            -------
+            str
+                The constructed regex
 
-            expression:      get_regex_format() % {
+            Examples:
+                expression:      get_regex_format()
+                oracle result:   REGEXP_LIKE(%(target)s, %(pattern)s)
+                postgres result: %(target)s ~ %(pattern)s
+
+                expression:      get_regex_format() % {"target": "col1",
+                                                        "pattern": "'pre.*suf'"}
+                oracle result:   REGEXP_LIKE(col1, 'pre.*suf', 'c')
+                postgres result:(col1 ~ 'pre.*suf')
+
+                expression:      get_regex_format() % {
                                     "target":  get_positional_bind_string(),
                                     "pattern": get_positional_bind_string()}
-            oracle result:   REGEXP_LIKE(:1, :1, 'c')
-            postgres result:(%s ~ %s)
+                oracle result:   REGEXP_LIKE(:1, :1, 'c')
+                postgres result:(%s ~ %s)
         """
         return self.con.get_regex_format(case_sensitive)
 
     def get_seq_next_clause(self, seqname):
-        """
-        Return an SQL expression that extracts the next value from a sequence.
+        """ Return an SQL expression that extracts the next value from a sequence.
 
-        Construct and return a dialect-specific SQL expression that, when
-        evaluated, will extract the next value from the specified sequence.
+            Construct and return a dialect-specific SQL expression that, when
+            evaluated, will extract the next value from the specified sequence.
 
-        Examples:
-            expression:      get_seq_next_clause('seq1')
-            oracle result:   seq1.NEXTVAL
-            postgres result: nextval('seq1')
+            Parameters
+            ----------
+            seqname : str
+                The sequence to get the next value for
+
+            Returns
+            -------
+            str
+
+            Examples:
+                expression:      get_seq_next_clause('seq1')
+                oracle result:   seq1.NEXTVAL
+                postgres result: nextval('seq1')
         """
         return self.con.get_seq_next_clause(seqname)
 
     def get_seq_next_value(self, seqname):
-        """
-        Return the next value from the specified sequence.
+        """ Return the next value from the specified sequence.
 
-        Execute a dialect-specific expression to extract the next value from
-        the specified sequence and return that value.
+            Execute a dialect-specific expression to extract the next value from
+            the specified sequence and return that value.
 
-        Examples:
-            expression:           get_seq_next_value('seq1')
-            oracle result from:   SELECT seq1.NEXTVAL FROM DUAL
-            postgres result from: SELECT nextval('seq1')
+            Parameters
+            ----------
+            seqname : str
+                The sequence to get the next value for
+
+            Returns
+            -------
+            int
+                The next value of the sequence
+
+            Examples:
+                expression:           get_seq_next_value('seq1')
+                oracle result from:   SELECT seq1.NEXTVAL FROM DUAL
+                postgres result from: SELECT nextval('seq1')
         """
         expr = self.get_seq_next_clause(seqname)
         return self.exec_sql_expression(expr)[0]
 
     def insert_many(self, table, columns, rows):
-        """
-        Insert a sequence of rows into the indicated database table.
+        """ Insert a sequence of rows into the indicated database table.
 
-        Arguments:
-            table   Name of the table into which data should be inserted.
-            columns Names of the columns to be inserted.
-            rows    A sequence of rows to insert.
+            If each row in rows is a sequence, the values in each row must be in
+            the same order as all other rows and columns must be a sequence
+            identifying that order.  If each row is a dictionary or other mapping,
+            columns can be any iterable that returns the column names and the set
+            of keys for each row must match the set of column names.
 
-        If each row in rows is a sequence, the values in each row must be in
-        the same order as all other rows and columns must be a sequence
-        identifying that order.  If each row is a dictionary or other mapping,
-        columns can be any iterable that returns the column names and the set
-        of keys for each row must match the set of column names.
+            Parameters
+            ----------
+            table : str
+                Name of the table into which data should be inserted.
+
+            columns : list
+                Names of the columns to be inserted.
+
+            rows : array like
+                A sequence of rows to insert.
         """
 
         if not rows:
@@ -451,19 +571,23 @@ class DesDbi(object):
             curs.close()
 
     def insert_many_indiv(self, table, columns, rows):
-        """
-        Insert a sequence of rows into the indicated database table.
+        """ Insert a sequence of rows into the indicated database table.
 
-        Arguments:
-            table   Name of the table into which data should be inserted.
-            columns Names of the columns to be inserted.
-            rows    A sequence of rows to insert.
+            If each row in rows is a sequence, the values in each row must be in
+            the same order as all other rows and columns must be a sequence
+            identifying that order.  If each row is a dictionary or other mapping,
+            columns can be any iterable that returns the column names and the set
+            of keys for each row must match the set of column names.
 
-        If each row in rows is a sequence, the values in each row must be in
-        the same order as all other rows and columns must be a sequence
-        identifying that order.  If each row is a dictionary or other mapping,
-        columns can be any iterable that returns the column names and the set
-        of keys for each row must match the set of column names.
+            Parameters
+            ----------
+            table : str
+                Name of the table into which data should be inserted.
+            columns : list
+                Names of the columns to be inserted.
+            rows : array like
+                A sequence of rows to insert.
+
         """
 
         if not rows:
@@ -494,46 +618,62 @@ class DesDbi(object):
 
     def query_simple(self, from_, cols='*', where=None, orderby=None,
                      params=None, rowtype=dict):
-        """
-        Issue a simple query and return results.
+        """ Issue a simple query and return results.
 
-        Arguments:
-            from_       a string containing the name of a table or view or some
-                        other from expression
-            cols        the columns to retrieve; can be a sequence of column
-                        names or expressions or a string containing them; for
-                        rowtype = dict, unique aliases should be assigned to
-                        expressions so that the keys are reasonable
-            where       optional WHERE expression; can be a string containing
-                        the where clause minus "WHERE " or a sequence of
-                        expressions to be joined by AND.
-            orderby     an optional ORDER BY expression; can be a string
-                        containing an ORDER BY expression or a sequence of such
-                        expressions.
-            params      optional bind parameters for the query.
-            rowtype     the type of row to return; dict results in a dictionary
-                        indexed by the lowercase version of the column names
-                        provided by the query results; other types will be
-                        passed the retrieved row sequence to be coerced to the
-                        desired type
+            If positional bind strings are used in column expressions and/or the
+            where clause, params should be a sequence of values in the same order.
+            If named bind strings are used, params should be a dictionary indexed
+            by bind string names.
 
-        If positional bind strings are used in column expressions and/or the
-        where clause, params should be a sequence of values in the same order.
-        If named bind strings are used, params should be a dictionary indexed
-        by bind string names.
+            The resulting rows are returned as a list of the specified rowtype.
 
-        The resulting rows are returned as a list of the specified rowtype.
+            Parameters
+            ----------
+            from_ : str
+                a string containing the name of a table or view or some
+                other from expression
 
-        Example:
-            Code:
-                dbh = coreutils.DesDbi()
-                cols  = ["col1", "col2"]
-                where = ["col1 > 5", "col2 < 'DEF'", "col3 = :1"]
-                ord   = cols
-                parms =("col3_value", )
-                rows = dbh.query_simple('tab1', cols, where, ord, parms)
-            Possible Output:
-               [{"col1": 23, "col2": "ABC"}, {"col1": 45, "col2": "AAA"}]
+            cols : various, optional
+                The columns to retrieve; can be a sequence of column
+                names or expressions or a string containing them; for
+                rowtype = dict, unique aliases should be assigned to
+                expressions so that the keys are reasonable. Default is '*'
+
+            where : various, optional
+                WHERE expression; can be a string containing
+                the where clause minus "WHERE " or a sequence of
+                expressions to be joined by AND. Default is None.
+
+            orderby : various, optional
+                ORDER BY expression; can be a string
+                containing an ORDER BY expression or a sequence of such
+                expressions. Default is None.
+
+            params : array like, optional
+                Bind parameters for the query. Default is None.
+
+            rowtype : type
+                The type of row to return; dict results in a dictionary
+                indexed by the lowercase version of the column names
+                provided by the query results; other types will be
+                passed the retrieved row sequence to be coerced to the
+                desired type. Default is dict.
+
+            Returns
+            -------
+            various
+                The results of the query.
+
+            Example:
+                Code:
+                    dbh = coreutils.DesDbi()
+                    cols  = ["col1", "col2"]
+                    where = ["col1 > 5", "col2 < 'DEF'", "col3 = :1"]
+                    ord   = cols
+                    parms =("col3_value", )
+                    rows = dbh.query_simple('tab1', cols, where, ord, parms)
+                Possible Output:
+                    [{"col1": 23, "col2": "ABC"}, {"col1": 45, "col2": "AAA"}]
 
         """
 
@@ -588,26 +728,37 @@ class DesDbi(object):
         return res
 
     def is_postgres(self):
-        """ doc
+        """ Returns whether or not the current connection is a PostgreSql
+
+            Returns
+            -------
+            bool
         """
         return self.type == 'postgres'
 
     def is_oracle(self):
-        """ doc
+        """ Returns whether of not the current connection is Oracle
 
+            Returns
+            -------
+            bool
         """
         return self.type == 'oracle'
 
     def rollback(self):
-        """
-        Rollback the current transaction.
+        """ Rollback the current transaction.
         """
 
         return self.con.rollback()
 
     def sequence_drop(self, seq_name):
-        "Drop sequence; do not generate error if it doesn't exist."
+        """ Drop sequence; do not generate error if it doesn't exist.
 
+            Parameters
+            ----------
+            seq_name : str
+                The name of the sequence to drop.
+        """
         self.con.sequence_drop(seq_name)
 
     def __str__(self):
@@ -616,43 +767,84 @@ class DesDbi(object):
         return '%s' %(copydict)
 
     def table_drop(self, table):
-        "Drop table; do not generate error if it doesn't exist."
+        """ Drop table; do not generate error if it doesn't exist.
 
+            Parameters
+            ----------
+            table : str
+                The name of the table to drop.
+        """
         self.con.table_drop(table)
 
     def from_dual(self):
-        """ doc
+        """ Get the appropriate dual expression.
 
+            Returns
+            -------
+            str
         """
         return self.con.from_dual()
 
     def which_services_file(self):
-        """ doc
+        """ Returns which services file is being used.
 
+            Returns
+            -------
+            str
+                The name of the file
         """
         return self.configdict['meta_file']
 
     def which_services_section(self):
-        """ doc
+        """ Returns the section of the services file is being used.
 
+            Returns
+            -------
+            str
+                The name of the section
         """
         return self.configdict['meta_section']
 
     def quote(self, value):
-        """ doc
+        """ Replace single quotes with doubled ones so that they show up properly in the database.
 
+            Parameters
+            ----------
+            value : str
+                The string to operate on
+
+            Returns
+            -------
+            str
+                The updated string
         """
         return "'%s'" % str(value).replace("'", "''")
 
     def get_current_timestamp_str(self):
-        """
-        return string for current timestamp
+        """ Return a string for current timestamp
+
+            Returns
+            -------
+            str
         """
         return self.con.get_current_timestamp_str()
 
     def query_results_dict(self, sql, tkey):
-        """ doc
+        """ Send a query to the database and convert the results of a query into a list of
+            dictionaries, one for each line.
+            The dictionary keys are the column names and the values are the associated values.
 
+            Parameters
+            ----------
+            sql : str
+                The query to perform
+
+            tkey : list
+                List of the expected columns
+
+            Returns
+            -------
+            list
         """
         curs = self.cursor()
         curs.execute(sql)
@@ -669,7 +861,16 @@ class DesDbi(object):
 
 
     def basic_insert_row(self, table, row):
-        """ Insert a row into the table """
+        """ Insert a row into the table
+
+            Parameters
+            ----------
+            table : str
+                The name of the table
+
+            row : dict
+                Dictionary of the columns and the data to insert.
+        """
         ctstr = self.get_current_timestamp_str()
 
         cols = row.keys()
@@ -697,7 +898,19 @@ class DesDbi(object):
             raise
 
     def basic_update_row(self, table, updatevals, wherevals):
-        """ Update a row in a table """
+        """ Update a row in a table
+
+            Parameters
+            ----------
+            table : str
+                The name of the table to update
+
+            updatevals : dict
+                Dictionary of the column names and values to update
+
+            wherevals : dict
+                Dictionary of column names and values to use in the where clause
+        """
 
         ctstr = self.get_current_timestamp_str()
 
@@ -746,7 +959,11 @@ class DesDbi(object):
         curs.close()
 
     def ping(self):
-        """ doc
+        """ Determine if the database connection is still live.
 
+            Returns
+            -------
+            bool
+                Whether the connection is still live.
         """
         return self.con.ping()
