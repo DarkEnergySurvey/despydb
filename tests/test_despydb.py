@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+# pylint: skip-file
 
 import unittest
 from mock import patch
@@ -45,13 +46,23 @@ class TestErrors(unittest.TestCase):
 
 class TestOracon(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        conData = {'user': 'non-user',
+                   'passwd': 'non-passwd',
+                   'server': 'non-server',
+                   'port': 0,
+                   'name': 'myDB'}
+        cls.con = ora.OracleConnection(conData, True)
+
     def test_init(self):
+        # Note that cx_Oracle.Connection cannot be mocked, so not all paths
+        # of init can be tested properly
         data = {'user': 'non-user',
                 'passwd': 'non-passwd',
                 'server': 'non-server',
                 'port': 0}
-        #with patch('despydb.oracon.cx_Oracle') as ocx:
-        #    with patch('despydb.oracon.cx_Oracle.Connection') as occ:
+
         with self.assertRaises(errors.MissingDBId):
             _ = ora.OracleConnection(data, True)
 
@@ -67,17 +78,35 @@ class TestOracon(unittest.TestCase):
         data['threaded'] = True
         _ = ora.OracleConnection(data, True)
 
-        #with patch('despydb.oracon.cx_Oracle.Connection', side_effect=TypeError("'module' is an invalid keyword")) as ptch:
-        #    try:
-        #        _ = ora.OracleConnection(data)
-        #    except cxo.InterfaceError:
-        #        pass
+        self.assertRaises(ora.cx_Oracle.DatabaseError, ora.OracleConnection, data)
 
-        #with patch('despydb.oracon.cx_Oracle.Connection', side_effect=TypeError('')) as ptch:
-        #    try:
-        #        _ = ora.OracleConnection(data)
-        #    except cxo.InterfaceError:
-        #        pass
+    def test_get_expr_exec_format(self):
+        self.assertTrue('DUAL' in self.con.get_expr_exec_format())
+
+    def test_get_named_bind_string(self):
+        name = 'blah'
+        self.assertEqual(':' + name, self.con.get_named_bind_string(name))
+
+    def test_get_positional_bind_string(self):
+        self.assertEqual(':2', self.con.get_positional_bind_string(2))
+
+    def test_get_regex_format(self):
+        self.assertTrue('c' in self.con.get_regex_format(True))
+        self.assertTrue('i' in self.con.get_regex_format(False))
+        self.assertTrue(self.con.get_regex_format(None).endswith('s)'))
+        self.assertRaises(errors.UnknownCaseSensitiveError, self.con.get_regex_format, '')
+
+    def test_get_seq_next_clause(self):
+        self.assertTrue(self.con.get_seq_next_clause('name').upper().endswith('NEXTVAL'))
+
+    def test_from_dual(self):
+        self.assertTrue('dual' in self.con.from_dual().lower())
+
+    def test_get_current_timestamp_str(self):
+        self.assertEqual('SYSTIMESTAMP', self.con.get_current_timestamp_str())
+
+    def test_ping(self):
+        self.assertFalse(self.con.ping())
 
 if __name__ == '__main__':
     unittest.main()
