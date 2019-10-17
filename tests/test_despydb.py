@@ -289,6 +289,12 @@ port    =   0
 
         self.assertRaises(errors.UnknownDBTypeError, desdbi.DesDbi, self.sfile, 'db-maximal')
 
+        with patch('despydb.oracon.OracleConnection', side_effect=Exception()):
+            self.assertRaises(Exception, desdbi.DesDbi, self.sfile, 'db-minimal', True)
+
+        with patch('despydb.oracon.OracleConnection', side_effect=[Exception(), MagicMock]):
+            dbh = desdbi.DesDbi(self.sfile, 'db-minimal', True)
+
     def test_with(self):
         with self.assertRaises(Exception):
             with patch('despydb.oracon'):
