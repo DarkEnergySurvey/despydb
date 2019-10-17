@@ -393,6 +393,92 @@ port    =   0
 
     def test_query_simple(self):
         self.assertRaises(TypeError, self.dbh.query_simple, None)
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL')
+        self.assertEqual(len(res), 5)
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', ['name','val'], ["key='endpoint'", "val='decahttp'"])
+        self.assertEqual(len(res), 1)
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'")
+        self.assertEqual(len(res), 1)
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', orderby="key")
+        self.assertEquals(len(res), 5)
+        self.assertEquals(res[0]['key'], 'endpoint')
+        res = self.dbh.query_simple('OPS_DATAFILE_METADATA', 'filetype,attribute_name', orderby=["filetype, attribute_name"])
+        self.assertEqual(res[0]['attribute_name'], 'a_image')
+        self.assertRaises(TypeError, self.dbh.query_simple, 'OPS_ARCHIVE_VAL', None)
+
+        self.assertTrue(isinstance(self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'", rowtype=tuple)[0], tuple))
+        self.assertTrue(isinstance(self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'", rowtype=list)[0], list))
+
+    def test_sequence_drop(self):
+        cur = self.dbh.cursor()
+        cur.execute("select count(*) from dummy where name='PFW_EXEC_SEQ'")
+        count = cur.fetchone()[0]
+        self.dbh.sequence_drop('PFW_EXEC_SEQ')
+        cur.execute("select count(*) from dummy where name='PFW_EXEC_SEQ'")
+        newcount = cur.fetchone()[0]
+        self.assertEqual(count - newcount, 1)
+        cur.close()
+
+    def test_table_drop(self):
+        cur = self.dbh.cursor()
+        cur.execute('select * from image')
+        self.dbh.table_drop('image')
+        self.assertRaises(sqlite3.OperationalError, cur.execute, 'select * from image')
+
+    def test_is_oracle(self):
+        self.assertFalse(self.dbh.is_oracle())
+
+        with patch('despydb.oracon'):
+            dbh = desdbi.DesDbi(self.sfile, 'db-minimal')
+            self.assertTrue(dbh.is_oracle())
+
+    def test_rollback(self):
+        cur = self.dbh.cursor()
+        cur.execute("select count(*) from proctag where tag='testtag'")
+        self.assertEqual(cur.fetchone()[0], 0)
+        self.dbh.basic_insert_row('proctag', {'tag': 'testtag', 'created_date': self.dbh.get_current_timestamp_str()})
+        cur.execute("select count(*) from proctag where tag='testtag'")
+        self.assertEqual(cur.fetchone()[0], 1)
+        self.dbh.rollback()
+        cur.execute("select count(*) from proctag where tag='testtag'")
+        self.assertEqual(cur.fetchone()[0], 0)
+
+    def test_from_dual(self):
+        self.assertTrue(isinstance(self.dbh.from_dual(), str))
+
+    def test_which_services_file(self):
+        self.assertEqual(self.dbh.which_services_file(), self.sfile)
+
+    def test_which_services_section(self):
+        self.assertEqual(self.dbh.which_services_section(), 'db-test')
+
+    def test_quote(self):
+        res = self.dbh.quote("'hello'")
+        self.assertEqual(res.count("'"), 6)
+
+    def test_query_results_dict(self):
+        res = self.dbh.query_results_dict('select name, junk from dummy', 'name')
+        self.assertTrue('desfile_seq', res.keys())
+
+    def test_basic_insert_row(self):
+        cur = self.dbh.cursor()
+        cur.execute("select count(*) from proctag where tag='testtag'")
+        self.assertEqual(cur.fetchone()[0], 0)
+        self.dbh.basic_insert_row('proctag', {'tag': 'testtag', 'created_date': self.dbh.get_current_timestamp_str()})
+        cur.execute("select count(*) from proctag where tag='testtag'")
+        self.assertEqual(cur.fetchone()[0], 1)
+        self.assertRaises(Exception, self.dbh.basic_insert_row, 'blah', {'tag': 'testtag', 'created_date': self.dbh.get_current_timestamp_str()})
+        cur.close()
+        self.dbh.rollback()
+
+    def test_basic_update_row(self):
+        cur = self.dbh.cursor()
+        cur.execute("select junk from dummy where name='TASK_SEQ'")
+        self.assertFalse(cur.fetchone()[0] == 86)
+        self.dbh.basic_update_row('dummy', {'junk': 86}, {'name': 'TASK_SEQ'})
+        cur.execute("select junk from dummy where name='TASK_SEQ'")
+        self.assertTrue(cur.fetchone()[0] == 86)
+
 
 """
 class TestPgcon(unittest.TestCase):
