@@ -11,3 +11,5 @@ tests/test_test.py
 coverage.xml
 
 .env
+
+tests/des_test_db.db

@@ -72,7 +72,11 @@ class MockConnection(sqlite3.Connection):
 
         """
         self.module = _MODULE_NAME
-
+        self.type = 'MOCKDB'
+        self.configdict = {'user': 'non-user',
+                           'passwd': 'non-passwd',
+                           'meta_file': 'non-file',
+                           'meta_section': 'non-section'}
         sqlite3.register_adapter(datetime.datetime, adapt_timestamp)
         sqlite3.register_converter('TIMESTAMP', convert_timestamp)
         sqlite3.register_converter('DATE', convert_timestamp)
@@ -88,7 +92,7 @@ class MockConnection(sqlite3.Connection):
             shutil.rmtree(os.path.join(self.home_dir, DB_FILE))
             needSetup = True
 
-        self.conn = sqlite3.connect(os.path.join(self.home_dir, DB_FILE),
+        self.con = sqlite3.connect(os.path.join(self.home_dir, DB_FILE),
                                     detect_types=sqlite3.PARSE_DECLTYPES,
                                     check_same_thread=False)
         self._autocommit = False
@@ -97,27 +101,33 @@ class MockConnection(sqlite3.Connection):
 
     @property
     def autocommit(self):
-        if self.conn.isolation_level is None:
+        if self.con.isolation_level is None:
             return True
         return False
 
     @autocommit.setter
     def autocommit(self, val):
         if val:
-            self.conn.isolation_level = None
+            self.con.isolation_level = None
         else:
-            self.conn.isolation_level = ''
+            self.con.isolation_level = ''
 
     def setup(self):
         """ initialize the DB """
+        print "Creating test database..."
         files = glob.glob(os.path.join(self.home_dir, 'sqlFiles', '*.sql'))
         for fls in files:
+            print "   " + fls.replace('.sql', '')
             flh = open(fls, 'r')
-            curs = self.conn.cursor()
+            curs = self.con.cursor()
             curs.executescript(flh.read())
-            self.conn.commit()
+            self.con.commit()
             curs.close()
             flh.close()
+
+    def teardown(self):
+        self.con.close()
+        os.unlink(os.path.join(self.home_dir, DB_FILE))
 
     def cursor(self, fetchsize=None):
         """
@@ -129,7 +139,7 @@ class MockConnection(sqlite3.Connection):
 
         # cx_Oracle doesn't implement/need named cursors, so ignore fetchsize.
 
-        return self.conn.cursor()
+        return self.con.cursor()
 
     def get_column_types(self, table_name):
         """
@@ -168,10 +178,10 @@ class MockConnection(sqlite3.Connection):
         """
 
         if case_sensitive is True:
-            c = self.conn.cursor()
+            c = self.con.cursor()
             c.execute('PRAGMA case_sensitive_like=true')
         elif case_sensitive is False:
-            c = self.conn.cursor()
+            c = self.con.cursor()
             c.execute('PRAGMA case_sensitive_like=false')
         elif case_sensitive is None:
             pass
@@ -183,9 +193,9 @@ class MockConnection(sqlite3.Connection):
     def get_seq_next_clause(self, seqname):
         "Return an SQL expression that extracts the next value from a sequence."
 
-        c = self.conn.cursor()
+        c = self.con.cursor()
         c.execute("update sequences set junk=5 where name='%s'" % seqname)
-        self.conn.commit()
+        self.con.commit()
         return "select seq_val from sequences where name='%s'" % seqname
 
     def sequence_drop(self, seq_name):
