@@ -55,6 +55,19 @@ def convert_timestamp(data):
     """ convert a timestamp to a datetime object """
     return datetime.datetime.fromtimestamp(data)
 
+class MockCursor(sqlite3.Cursor):
+    def __init__(self, *args, **kwargs):
+        self._stmt = None
+        sqlite3.Cursor.__init__(self, *args, **kwargs)
+
+    def prepare(self, stmt):
+        self._stmt = stmt
+
+    def execute(self, stmt, params=()):
+        if stmt:
+            return super(MockCursor, self).execute(stmt, params)
+        return super(MockCursor, self).execute(self._stmt, params)
+
 
 class MockConnection(sqlite3.Connection):
     """
@@ -71,6 +84,8 @@ class MockConnection(sqlite3.Connection):
         access_data.
 
         """
+        self.haveExpr = False
+        self.pingval = True
         self.module = _MODULE_NAME
         self.type = 'MOCKDB'
         self.configdict = {'user': 'non-user',
@@ -91,42 +106,43 @@ class MockConnection(sqlite3.Connection):
         elif not os.path.isfile(os.path.join(self.home_dir, DB_FILE)):
             shutil.rmtree(os.path.join(self.home_dir, DB_FILE))
             needSetup = True
-
-        self.con = sqlite3.connect(os.path.join(self.home_dir, DB_FILE),
-                                    detect_types=sqlite3.PARSE_DECLTYPES,
-                                    check_same_thread=False)
+        sqlite3.Connection.__init__(self, database=os.path.join(self.home_dir, DB_FILE),
+                                   detect_types=sqlite3.PARSE_DECLTYPES,
+                                   check_same_thread=False)
         self._autocommit = False
         if needSetup:
             self.setup()
 
+
     @property
     def autocommit(self):
-        if self.con.isolation_level is None:
+        if self.isolation_level is None:
             return True
         return False
 
     @autocommit.setter
     def autocommit(self, val):
         if val:
-            self.con.isolation_level = None
+            self.isolation_level = None
         else:
-            self.con.isolation_level = ''
+            self.isolation_level = ''
 
     def setup(self):
         """ initialize the DB """
         print "Creating test database..."
         files = glob.glob(os.path.join(self.home_dir, 'sqlFiles', '*.sql'))
         for fls in files:
-            print "   " + fls.replace('.sql', '')
+            loc = fls.rfind('/')
+            print "   " + fls.replace('.sql', '')[loc + 1:]
             flh = open(fls, 'r')
-            curs = self.con.cursor()
+            curs = self.cursor()
             curs.executescript(flh.read())
-            self.con.commit()
+            self.commit()
             curs.close()
             flh.close()
 
     def teardown(self):
-        self.con.close()
+        self.close()
         os.unlink(os.path.join(self.home_dir, DB_FILE))
 
     def cursor(self, fetchsize=None):
@@ -139,7 +155,7 @@ class MockConnection(sqlite3.Connection):
 
         # cx_Oracle doesn't implement/need named cursors, so ignore fetchsize.
 
-        return self.con.cursor()
+        return MockCursor(self)
 
     def get_column_types(self, table_name):
         """
@@ -157,8 +173,10 @@ class MockConnection(sqlite3.Connection):
 
     def get_expr_exec_format(self):
         """Return a format string for a statement to execute SQL expressions."""
-
-        return 'SELECT %s'
+        if self.haveExpr:
+            self.haveExpr = False
+            return '%s'
+        return 'SELECT %s FROM DUMMY'
 
     def get_named_bind_string(self, name):
         """Return a named bind (substitution) string for name with cx_Oracle."""
@@ -168,7 +186,7 @@ class MockConnection(sqlite3.Connection):
     def get_positional_bind_string(self, pos=1):
         "Return a positional bind (substitution) string for cx_Oracle."
 
-        return "%s"
+        return "?"
 
     def get_regex_format(self, case_sensitive=True):
         """
@@ -178,25 +196,28 @@ class MockConnection(sqlite3.Connection):
         """
 
         if case_sensitive is True:
-            c = self.con.cursor()
+            c = self.cursor()
             c.execute('PRAGMA case_sensitive_like=true')
         elif case_sensitive is False:
-            c = self.con.cursor()
+            c = self.cursor()
             c.execute('PRAGMA case_sensitive_like=false')
         elif case_sensitive is None:
             pass
         else:
             raise errors.UnknownCaseSensitiveError(value=case_sensitive)
 
-        return "%%(target)s REGEXP %%(pattern)s"
+        return "%(target)s REGEXP %(pattern)s"
 
     def get_seq_next_clause(self, seqname):
         "Return an SQL expression that extracts the next value from a sequence."
 
-        c = self.con.cursor()
-        c.execute("update sequences set junk=5 where name='%s'" % seqname)
-        self.con.commit()
-        return "select seq_val from sequences where name='%s'" % seqname
+        c = self.cursor()
+        c.execute("select junk from dummy where name='%s'" % seqname)
+        val = c.fetchone()[0]
+        c.execute("update dummy set junk=%i where name='%s'" % (val + 1, seqname))
+        self.commit()
+        self.haveExpr = True
+        return "select junk from dummy where name='%s'" % seqname
 
     def sequence_drop(self, seq_name):
         "Drop sequence; do not generate error if it doesn't exist."
@@ -222,4 +243,4 @@ class MockConnection(sqlite3.Connection):
         return str(time.mktime(datetime.datetime.now().timetuple()))
 
     def ping(self):
-        return True
+        return self.pingval
