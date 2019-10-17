@@ -101,9 +101,13 @@ class DesDbi(object):
                 self.configdict['threaded'] = threaded
                 import despydb.oracon
                 self.conClass = despydb.oracon.OracleConnection
-            elif self.type == 'postgres':
-                import despydb.pgcon
-                self.conClass = despydb.pgcon.PostgresConnection
+            #elif self.type == 'postgres':
+            #    import despydb.pgcon
+            #    self.conClass = despydb.pgcon.PostgresConnection
+            elif self.type == 'test':
+                sys.path.append('../../tests')
+                import MockDBI
+                self.conClass = MockDBI.MockConnection
             else:
                 raise errors.UnknownDBTypeError(self.type)
 
@@ -115,17 +119,17 @@ class DesDbi(object):
             self.con = connection.con
 
     def __enter__(self):
-        "Enable the use of this class as a context manager."
+        """ Enable the use of this class as a context manager.
+        """
 
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """
-        Shutdown the connection to the database when context ends.
+        """ Shutdown the connection to the database when context ends.
 
-        Commit any pending transaction if no exception is raised; otherwise,
-        rollback that transaction.  In either case, close the database
-        connection.
+            Commit any pending transaction if no exception is raised; otherwise,
+            rollback that transaction.  In either case, close the database
+            connection.
         """
         if exc_type is None:
             self.commit()
