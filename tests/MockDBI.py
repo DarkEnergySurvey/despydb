@@ -220,19 +220,22 @@ class MockConnection(sqlite3.Connection):
         return "select junk from dummy where name='%s'" % seqname
 
     def sequence_drop(self, seq_name):
-        "Drop sequence; do not generate error if it doesn't exist."
-        return
+        """ Drop sequence; do not generate error if it doesn't exist."""
+        c = self.cursor()
+        c.execute("delete from dummy where name='%s'" % seq_name)
+        c.close()
+        self.commit()
 
     def table_drop(self, table):
-        "Drop table; do not generate error if it doesn't exist."
+        """ Drop table; do not generate error if it doesn't exist. """
 
         stmt = 'DROP TABLE %s' % table
 
         curs = self.cursor()
         try:
             curs.execute(stmt)
-        except sqlite3.Error:
-            raise
+        except sqlite3.OperationalError:
+            pass
         finally:
             curs.close()
 
