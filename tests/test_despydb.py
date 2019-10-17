@@ -6,6 +6,7 @@ import sys
 import os
 import stat
 import datetime
+import sqlite3
 from contextlib import contextmanager
 from StringIO import StringIO
 from mock import patch, MagicMock
@@ -275,23 +276,18 @@ port    =   0
 
     @classmethod
     def tearDownClass(cls):
-    #    cls.dbh.teardown()
+        cls.dbh.con.teardown()
         os.unlink(cls.sfile)
 
     def test_init(self):
         dbh = desdbi.DesDbi(connection=self.dbh)
 
         dbh = desdbi.DesDbi(self.sfile, 'db-test')
+
         with patch('despydb.oracon'):
             dbh = desdbi.DesDbi(self.sfile, 'db-minimal')
 
         self.assertRaises(errors.UnknownDBTypeError, desdbi.DesDbi, self.sfile, 'db-maximal')
-
-        with patch('despydb.oracon.OracleConnection', side_effect=Exception()):
-            self.assertRaises(Exception, desdbi.DesDbi, self.sfile, 'db-minimal', True)
-
-        with patch('despydb.oracon.OracleConnection', side_effect=[Exception(), MagicMock]):
-            dbh = desdbi.DesDbi(self.sfile, 'db-minimal', True)
 
     def test_with(self):
         with self.assertRaises(Exception):
@@ -303,6 +299,95 @@ port    =   0
             dbh = desdbi.DesDbi(self.sfile, 'db-minimal')
             with desdbi.DesDbi(connection=dbh) as dbh2:
                 pass
+
+    def test_ping(self):
+        self.dbh.ping()
+        self.dbh.con.pinval = False
+        self.dbh.ping()
+
+    def test_autocommit(self):
+        self.assertFalse(self.dbh.autocommit(True))
+        self.assertTrue(self.dbh.autocommit(False))
+        self.assertFalse(self.dbh.autocommit())
+
+    def test_cursor(self):
+        self.assertTrue(isinstance(self.dbh.cursor(), sqlite3.Cursor))
+
+    def test_exec_sql_expression(self):
+        res = self.dbh.exec_sql_expression(['name','junk'])
+        self.assertEqual(len(res), 2)
+        res = self.dbh.exec_sql_expression('name,junk')
+        self.assertEqual(len(res), 2)
+
+    def test_get_column_metadata(self):
+        res = self.dbh.get_column_metadata('exposure')
+        self.assertTrue('expnum' in res.keys())
+        self.assertTrue('nite' in res.keys())
+
+    def test_get_column_lengths(self):
+        res = self.dbh.get_column_lengths('exposure')
+        for _, val in res.items():
+            self.assertIsNone(val)  #sqlite databases do not have column lengths
+
+    def test_get_column_names(self):
+        res = self.dbh.get_column_names('exposure')
+        self.assertEqual(len(res), 56)
+        self.assertTrue('expnum' in res)
+        self.assertTrue('nite' in res)
+
+    def test_get_column_types(self):
+        res = self.dbh.get_column_types('exposure')
+        self.assertEqual(res['telescope'], str)
+        self.assertEqual(res['mjd_obs'], float)
+
+    def test_get_named_bind_string(self):
+        self.assertTrue('blah' in self.dbh.get_named_bind_string('blah'))
+
+    def test_get_positional_bind_string(self):
+        self.assertTrue('?' in self.dbh.get_positional_bind_string(5))
+
+    def test_get_regex_clause(self):
+        res = self.dbh.get_regex_clause('col1', '*.fits')
+        self.assertTrue('col1' in res)
+
+    def test_get_seq_next_clause(self):
+        self.assertTrue(isinstance(self.dbh.get_seq_next_clause('DESFILE_SEQ'), str))
+
+    def test_get_seq_next_value(self):
+        res1 = self.dbh.get_seq_next_value('DESFILE_SEQ')
+        res2 = self.dbh.get_seq_next_value('DESFILE_SEQ')
+        self.assertEqual(res2-res1, 1)
+
+    def test_insert_many(self):
+        self.dbh.autocommit(False)
+        self.dbh.insert_many('none', 'none', [])
+        self.dbh.insert_many('exposure', ['expnum','nite'], [(12345, '20190809'), (234567, '20190809')])
+        self.dbh.insert_many('exposure', ['expnum','nite'], [{'expnum': 12345, 'nite': '20190810'}, {'expnum': 234567, 'nite': '20190810'}])
+        self.dbh.commit()
+        c = self.dbh.cursor()
+        c.execute('select * from exposure where nite="20190809"')
+        self.assertEqual(len(c.fetchall()), 2)
+        c.execute('select * from exposure where nite="20190810"')
+        self.assertEqual(len(c.fetchall()), 2)
+        c.close()
+
+    def test_insert_many_indiv(self):
+        self.dbh.autocommit(False)
+        self.dbh.insert_many_indiv('none', 'none', [])
+        self.dbh.insert_many_indiv('exposure', ['expnum','nite'], [(12345, '20190811'), (234567, '20190811')])
+        self.dbh.insert_many_indiv('exposure', ['expnum','nite'], [{'expnum': 12345, 'nite': '20190812'}, {'expnum': 234567, 'nite': '20190812'}])
+        self.dbh.commit()
+        c = self.dbh.cursor()
+        c.execute('select * from exposure where nite="20190811"')
+        self.assertEqual(len(c.fetchall()), 2)
+        c.execute('select * from exposure where nite="20190812"')
+        self.assertEqual(len(c.fetchall()), 2)
+        c.close()
+        self.assertRaises(Exception, self.dbh.insert_many_indiv, 'exposure2', ['expnum','nite'], [{'expnum': 12345, 'nite': '20190812'}, {'expnum': 234567, 'nite': '20190812'}])
+
+    def test_query_simple(self):
+        self.assertRaises(TypeError, self.dbh.query_simple, None)
+
 """
 class TestPgcon(unittest.TestCase):
 
