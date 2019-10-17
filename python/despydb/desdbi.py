@@ -88,6 +88,7 @@ class DesDbi(object):
     """
 
     def __init__(self, desfile=None, section=None, retry=False, connection=None, threaded=False):
+        #pylint: disable=import-error
         self.retry = retry
         if connection is None:
             self.inherit = False
@@ -295,7 +296,9 @@ class DesDbi(object):
         sqlstr = 'SELECT * FROM %s WHERE 0=1' % table_name
         if self.type == 'oracle':
             cursor.parse(sqlstr)
-        elif self.type == 'postgres':
+        #elif self.type == 'postgres':
+        #    cursor.execute(sqlstr)
+        elif self.type == 'test':
             cursor.execute(sqlstr)
         else:
             raise errors.UnknownDBTypeError(self.type)
