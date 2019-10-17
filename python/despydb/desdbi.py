@@ -734,14 +734,14 @@ class DesDbi(object):
 
         return res
 
-    def is_postgres(self):
-        """ Returns whether or not the current connection is a PostgreSql
-
-            Returns
-            -------
-            bool
-        """
-        return self.type == 'postgres'
+    #def is_postgres(self):
+    #    """ Returns whether or not the current connection is a PostgreSql
+    #
+    #        Returns
+    #        -------
+    #        bool
+    #    """
+    #    return self.type == 'postgres'
 
     def is_oracle(self):
         """ Returns whether of not the current connection is Oracle
@@ -837,21 +837,7 @@ class DesDbi(object):
         return self.con.get_current_timestamp_str()
 
     def query_results_dict(self, sql, tkey):
-        """ Send a query to the database and convert the results of a query into a list of
-            dictionaries, one for each line.
-            The dictionary keys are the column names and the values are the associated values.
-
-            Parameters
-            ----------
-            sql : str
-                The query to perform
-
-            tkey : list
-                List of the expected columns
-
-            Returns
-            -------
-            list
+        """ doc
         """
         curs = self.cursor()
         curs.execute(sql)
