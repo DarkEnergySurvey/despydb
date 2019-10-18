@@ -12,12 +12,9 @@ from StringIO import StringIO
 from mock import patch, MagicMock
 
 from despydb.oracon import OracleConnection, _ORA_NO_TABLE_VIEW, _ORA_NO_SEQUENCE, _TYPE_MAP
-import despydb.pgcon as pgcon
 import despydb.errors as errors
 import despydb.desdbi as desdbi
 import cx_Oracle as cxo
-import psycopg2
-from despydb.pgcon import PostgresConnection
 from MockDBI import MockConnection, convert_timestamp
 
 @contextmanager
