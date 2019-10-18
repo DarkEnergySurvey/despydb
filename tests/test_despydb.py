@@ -18,7 +18,7 @@ import despydb.desdbi as desdbi
 import cx_Oracle as cxo
 import psycopg2
 from despydb.pgcon import PostgresConnection
-from MockDBI import MockConnection
+from MockDBI import MockConnection, convert_timestamp
 
 @contextmanager
 def capture_output():
@@ -406,6 +406,9 @@ port    =   0
         self.assertEqual(res[0]['attribute_name'], 'a_image')
         self.assertRaises(TypeError, self.dbh.query_simple, 'OPS_ARCHIVE_VAL', None)
 
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', ['name','val'], ["key=:1", "val=:2"], params=('endpoint','decahttp'))
+        self.assertEqual(len(res), 1)
+
         self.assertTrue(isinstance(self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'", rowtype=tuple)[0], tuple))
         self.assertTrue(isinstance(self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'", rowtype=list)[0], list))
 
@@ -478,80 +481,17 @@ port    =   0
         self.dbh.basic_update_row('dummy', {'junk': 86}, {'name': 'TASK_SEQ'})
         cur.execute("select junk from dummy where name='TASK_SEQ'")
         self.assertTrue(cur.fetchone()[0] == 86)
+        now = datetime.datetime.now()
+        date_str = "TO_DATE('%i-%02i-%02i %02i:%02i:%.4f', 'YYYY-MM-DD HH24:MI:SS.S')" % (now.year, now.month,
+                                                                                          now.day, now.hour,
+                                                                                          now.minute, now.second
+                                                                                          )
+        self.dbh.basic_update_row('dummy', {'junk': date_str}, {'name': 'TASK_SEQ'})
+        cur.execute("select junk from dummy where name='TASK_SEQ'")
+        self.assertTrue(abs((convert_timestamp(cur.fetchone()[0])-now).total_seconds()) < 1.0)
+        self.assertRaisesRegexp(Exception, '0 rows', self.dbh.basic_update_row, 'dummy', {'junk': 86}, {'name': None})
 
-
-"""
-class TestPgcon(unittest.TestCase):
-
-    @classmethod
-    @patch('despydb.pgcon.psycopg2.extensions.connection', MockPostgres)
-    def setUpClass(cls):
-        modifyPostgres()
-        conData = {'user': 'non-user',
-                   'passwd': 'non-passwd',
-                   'server': 'non-server',
-                   'port': 0,
-                   'name': 'myDB'}
-        cls.con = pgcon.PostgresConnection(conData)
-
-    def test_get_expr_exec_format(self):
-        self.assertTrue('SELECT' in self.con.get_expr_exec_format())
-
-    def test_get_named_bind_string(self):
-        name = 'blah'
-        self.assertTrue('%%' in self.con.get_named_bind_string(name))
-
-    def test_get_positional_bind_string(self):
-        self.assertEqual('2', self.con.get_positional_bind_string(2))
-
-    def test_get_regex_format(self):
-        self.assertTrue('~' in self.con.get_regex_format(True))
-        self.assertTrue('~*' in self.con.get_regex_format(False))
-        self.assertTrue('~' in self.con.get_regex_format(None))
-        self.assertRaises(errors.UnknownCaseSensitiveError, self.con.get_regex_format, '')
-
-    def test_get_seq_next_clause(self):
-        self.assertTrue(self.con.get_seq_next_clause('name').upper().startswith('NEXTVAL'))
-
-    def test_from_dual(self):
-        self.assertTrue('dual' in self.con.from_dual().lower())
-
-    def test_get_current_timestamp_str(self):
-        self.assertEqual('SYSTIMESTAMP', self.con.get_current_timestamp_str())
-
-    @patch('despydb.oracon.cx_Oracle.Connection', MockOracle)
-    def test_ping(self):
-        con = OracleConnection(self.conData)
-        self.assertTrue(con.ping())
-        self.assertFalse(con.ping())
-
-    @patch('despydb.pgcon.psycopg2.extensions.connection', MockPostgres)
-    def test_getColumn_types(self):
-        con = OracleConnection(self.conData)
-        data = (('DATE', psycopg2.DATETIME),
-                ('NAME', psycopg2.STRING),
-                ('COUNT', psycopg2.extensions.FLOAT))
-        con.setReturn(data)
-        rt = con.get_column_types('table')
-        self.assertEqual(rt['date'], datetime.datetime)
-        self.assertEqual(rt['name'], str)
-        self.assertEqual(rt['count'], float)
-
-    @patch('despydb.oracon.cx_Oracle.Connection', MockOracle)
-    def test_sequence_drop(self):
-        con = OracleConnection(self.conData)
-        con.sequence_drop('MYSEQ')
-        con.sequence_drop('MYSEQ')
-        self.assertRaises(cxo.DatabaseError, con.sequence_drop, 'MYSEQ')
-
-    @patch('despydb.oracon.cx_Oracle.Connection', MockOracle)
-    def test_table_drop(self):
-        con = OracleConnection(self.conData)
-        con.table_drop('MYTABLE')
-        con.table_drop('MYTABLE')
-        self.assertRaises(cxo.DatabaseError, con.table_drop, 'MYTABLE')
-"""
-
+        self.assertRaises(Exception, self.dbh.basic_update_row, 'dummy2', {'junk': 89}, {'name': 'TASK_SEQ'})
 
 if __name__ == '__main__':
     unittest.main()
