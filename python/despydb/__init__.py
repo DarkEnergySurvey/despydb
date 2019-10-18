@@ -30,11 +30,11 @@ __version__ = "2.0.1"
 # Note that pydoc includes documentation for entries in the __all__  list when
 # generating documentation for this package.
 
-__all__ = ['DesDbi', 'MissingDBId', 'ServiceaccessException',
+__all__ = ['DesDbi', 'MissingDBId',
            'UnknownDBTypeError', 'UnknownCaseSensitiveError']
 
 # Make the main class and all the error classes available directly within
 # the package to simplify imports for package users.
 
-from .desdbi      import DesDbi
-from .errors      import *
+from .desdbi import DesDbi
+from .errors import MissingDBId, UnknownDBTypeError, UnknownCaseSensitiveError

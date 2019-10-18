@@ -341,5 +341,5 @@ class OracleConnection(cx_Oracle.Connection):
             curs = self.cursor()
             curs.execute('select 1 from dual')
             return True
-        except:
+        except Exception:
             return False
