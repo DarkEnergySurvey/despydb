@@ -304,9 +304,23 @@ port    =   0
                 pass
 
     def test_ping(self):
-        self.dbh.ping()
-        self.dbh.con.pinval = False
-        self.dbh.ping()
+        dbh = desdbi.DesDbi(self.sfile, 'db-test')
+        self.assertTrue(dbh.ping())
+        dbh.close()
+        self.assertFalse(dbh.ping())
+
+    def test_reconnect(self):
+        dbh = desdbi.DesDbi(self.sfile, 'db-test')
+        self.assertTrue(dbh.ping())
+        with capture_output() as (out, err):
+            dbh.reconnect()
+            output = out.getvalue().strip()
+            self.assertTrue('still good' in output)
+        dbh.close()
+        self.assertFalse(dbh.ping())
+        dbh.reconnect()
+        self.assertTrue(dbh.ping())
+        dbh.close()
 
     def test_autocommit(self):
         self.assertFalse(self.dbh.autocommit(True))
