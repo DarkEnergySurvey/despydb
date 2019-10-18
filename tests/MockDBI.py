@@ -197,6 +197,10 @@ class MockConnection(sqlite3.Connection):
         else:
             self.isolation_level = ''
 
+    def close(self):
+        self.pingval = False
+        super(MockConnection, self).close()
+
     def setup(self):
         """ initialize the DB """
         print "Creating test database..."
