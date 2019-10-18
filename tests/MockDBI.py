@@ -3,6 +3,7 @@
 """
 # pylint: skip-file
 
+
 import sqlite3
 
 import datetime
@@ -13,6 +14,7 @@ import inspect
 import glob
 
 import shutil
+from dateutil import parser
 
 import despydb.errors as errors
 
@@ -55,17 +57,85 @@ def convert_timestamp(data):
     """ convert a timestamp to a datetime object """
     return datetime.datetime.fromtimestamp(data)
 
+def find_balance(stmt, start):
+    """ Function to find the outermost set of balanced parentheses.
+
+    """
+    open_list = ['(']
+    close_list = [')']
+    stack = []
+    found = False
+    for i, val in enumerate(stmt[start:]):
+        if val in open_list:
+            stack.append(val)
+            found = True
+        elif val in close_list:
+            pos = close_list.index(val)
+            if (stack and open_list[pos] == stack[len(stack) - 1]):
+                stack.pop()
+            else:
+                raise Exception("Unbalanced parentheses found")
+            if found and not stack:
+                return i + start + 1
+    raise Exception("Unbalanced parentheses found")
+
+def convert_TO_DATE(stmt):
+    """ Function to convert Oracle TO_DATE statement into a timestamp useable
+        by sqlite3.
+
+        Parameters
+        ----------
+        stmt : str
+            The sql statement to work on
+
+        Returns
+        -------
+        str
+            The sql statement with the appropriate replacements made.
+    """
+    if not isinstance(stmt, str):
+        return stmt
+    loc = stmt.find('TO_DATE')
+    while loc > -1:
+        end = find_balance(stmt, loc)
+        repl = stmt[loc:end]
+        orig = stmt[loc:end]
+        repl = repl[repl.find('(') + 1: -1].strip()
+        sp = repl.split(',')
+        sp.reverse()
+        dstr = sp.pop()
+        if len(sp) != 2:
+            try:
+                while dstr.count("'")%2 != 0:
+                    dstr += sp.pop()
+            except IndexError:
+                raise Exception('Unbalanced quotes in expresion.')
+        dstr = dstr.replace("'", '')
+        dval = adapt_timestamp(parser.parse(dstr))
+        stmt = stmt.replace(orig, dval)
+        loc = stmt.find('TO_DATE')
+    return stmt
+
 class MockCursor(sqlite3.Cursor):
     def __init__(self, *args, **kwargs):
         self._stmt = None
         sqlite3.Cursor.__init__(self, *args, **kwargs)
 
     def prepare(self, stmt):
-        self._stmt = stmt
+        self._stmt = convert_TO_DATE(stmt)
 
     def execute(self, stmt, params=()):
+        if params:
+            if isinstance(params, (tuple, list, set)):
+                newpar = []
+                for par in params:
+                    newpar.append(convert_TO_DATE(par))
+                params = newpar
+            elif isinstance(params, dict):
+                for k, val in params.items():
+                    params[k] = convert_TO_DATE(val)
         if stmt:
-            return super(MockCursor, self).execute(stmt, params)
+            return super(MockCursor, self).execute(convert_TO_DATE(stmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
 
 
