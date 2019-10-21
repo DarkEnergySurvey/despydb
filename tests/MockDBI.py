@@ -55,7 +55,7 @@ def adapt_timestamp(data):
 
 def convert_timestamp(data):
     """ convert a timestamp to a datetime object """
-    return datetime.datetime.fromtimestamp(data)
+    return datetime.datetime.fromtimestamp(float(data))
 
 def find_balance(stmt, start):
     """ Function to find the outermost set of balanced parentheses.
@@ -116,10 +116,25 @@ def convert_TO_DATE(stmt):
         loc = stmt.find('TO_DATE')
     return stmt
 
+class Slot(int):
+    def __init__(self):
+        self.value = None
+
+    def __str__(self):
+        return str(self.value)
+
+    def __repr__(self):
+        return str(self.value)
+
 class MockCursor(sqlite3.Cursor):
     def __init__(self, *args, **kwargs):
         self._stmt = None
+        self.fail = False
+        if ('fail' in kwargs.keys()):
+            self.fail = kwargs['fail']
+            del kwargs['fail']
         sqlite3.Cursor.__init__(self, *args, **kwargs)
+        self._slot = -1
 
     def prepare(self, stmt):
         self._stmt = convert_TO_DATE(stmt)
@@ -138,6 +153,40 @@ class MockCursor(sqlite3.Cursor):
             return super(MockCursor, self).execute(convert_TO_DATE(stmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
 
+    def var(self, _type):
+        return Slot()
+
+    def callproc(self, procname, procargs):
+        if procname == 'SEM_WAIT':
+            [semname, slot] = procargs
+            while True:
+                self.execute("select slot from SEMLOCK where NAME='%s' and IN_USE=0" % semname)
+                res = self.fetchall()
+                try:
+                    slot.value = res[0][0]
+                    self.execute("update SEMLOCK set IN_USE=1 where slot=%i and name='%s'" % (slot.value, semname))
+                    #self.execute('commit')
+                    break
+                except IndexError:
+                    if self.fail:
+                        raise Exception('SEMAPHORE allocation failure')
+                    time.sleep(5)
+        elif procname == 'SEM_DEQUEUE':
+            [semname, slot] = procargs
+            slot.value = None
+        elif procname == 'SEM_SIGNAL':
+            [semname, slot] = procargs
+            self.execute("update SEMLOCK set IN_USE=0 where slot=%i and name='%s'" % (slot.value, semname))
+            #self.execute('commit')
+
+        elif procname == 'createObjectsTable':
+            pass
+        elif procname == 'pMergeObjects':
+            pass
+        elif procname.endswith('.pMergeObjects'):
+            pass
+        else:
+            raise Exception("Unknown proc called")
 
 class MockConnection(sqlite3.Connection):
     """
@@ -145,7 +194,8 @@ class MockConnection(sqlite3.Connection):
 
     Refer to desdbi.py for full method documentation.
     """
-
+    home_dir = None
+    mock_fail = False
     def __init__(self, *args, **kwargs):
         """
         Initialize an OracleConnection object
@@ -167,7 +217,7 @@ class MockConnection(sqlite3.Connection):
         sqlite3.register_converter('DATE', convert_timestamp)
 
         filename = inspect.getframeinfo(inspect.currentframe()).filename
-        self.home_dir = os.path.dirname(os.path.abspath(filename))
+        MockConnection.home_dir = os.path.dirname(os.path.abspath(filename))
 
         needSetup = False
 
@@ -219,6 +269,10 @@ class MockConnection(sqlite3.Connection):
         self.close()
         os.unlink(os.path.join(self.home_dir, DB_FILE))
 
+    @classmethod
+    def destroy(cls):
+        os.unlink(os.path.join(cls.home_dir, DB_FILE))
+
     def cursor(self, fetchsize=None):
         """
         Return a cx_Oracle Cursor object for operating on the connection.
@@ -229,7 +283,7 @@ class MockConnection(sqlite3.Connection):
 
         # cx_Oracle doesn't implement/need named cursors, so ignore fetchsize.
 
-        return MockCursor(self)
+        return MockCursor(self, fail=MockConnection.mock_fail)
 
     def get_column_types(self, table_name):
         """
@@ -284,19 +338,18 @@ class MockConnection(sqlite3.Connection):
 
     def get_seq_next_clause(self, seqname):
         "Return an SQL expression that extracts the next value from a sequence."
-
+        seq = seqname.upper()
         c = self.cursor()
-        c.execute("select junk from dummy where name='%s'" % seqname)
-        val = c.fetchone()[0]
-        c.execute("update dummy set junk=%i where name='%s'" % (val + 1, seqname))
+        c.execute("update sequences set junk=0 where name='%s'" % seq)
         self.commit()
         self.haveExpr = True
-        return "select junk from dummy where name='%s'" % seqname
+        return "select seq_val from sequences where name='%s'" % seq
 
     def sequence_drop(self, seq_name):
         """ Drop sequence; do not generate error if it doesn't exist."""
         c = self.cursor()
-        c.execute("delete from dummy where name='%s'" % seq_name)
+        c.execute("delete from dummy where name='%s'" % seq_name.upper())
+        c.execute("delete from sequences_data where name='%s'" % seq_name.upper())
         c.close()
         self.commit()
 
