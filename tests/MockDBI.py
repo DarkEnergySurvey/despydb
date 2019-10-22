@@ -196,6 +196,23 @@ class MockConnection(sqlite3.Connection):
     """
     home_dir = None
     mock_fail = False
+    temp_tables = {'OPM_FILENAME_GTT': {'FILENAME': 'TEXT',
+                                        'COMPRESSION' :'TEXT'},
+                    'GTT_ARTIFACT': {'FILENAME': 'TEXT',
+                                    'COMPRESSION': 'TEXT',
+                                    'MD5SUM': 'TEXT',
+                                    'FILESIZE': 'INTEGER'},
+                   'GTT_ATTEMPT': {'REQNUM': 'INTEGER',
+                                   'UNITNAME': 'TEXT',
+                                    'ATTNUM': 'INTEGER'},
+                    'GTT_EXPNUM': {'EXPNUM': 'INTEGER',
+                                  'CCDNUM': 'INTEGER',
+                                  'BAND': 'TEXT'},
+                   'GTT_ID': {'ID': 'INTEGER'},
+                   'GTT_NUM': {'NUM': 'INTEGER'},
+                   'GTT_STR': {'STR': 'TEXT'}}
+
+
     def __init__(self, *args, **kwargs):
         """
         Initialize an OracleConnection object
@@ -229,10 +246,13 @@ class MockConnection(sqlite3.Connection):
         sqlite3.Connection.__init__(self, database=os.path.join(self.home_dir, DB_FILE),
                                    detect_types=sqlite3.PARSE_DECLTYPES,
                                    check_same_thread=False)
+        cur = self.cursor()
+        cur.execute("PRAGMA synchronous = OFF")
+        cur.close()
         self._autocommit = False
+        self.setupTempTables()
         if needSetup:
             self.setup()
-
 
     @property
     def autocommit(self):
@@ -247,8 +267,27 @@ class MockConnection(sqlite3.Connection):
         else:
             self.isolation_level = ''
 
+    def setupTempTables(self):
+        cur = self.cursor()
+        cur.execute("PRAGMA temp_store = MEMORY")
+        for table, columns in self.temp_tables.items():
+            cur.execute("create temporary table if not exists %s (" % table + (',').join('"' + key + '" ' + val for key, val in columns.items()) + ')')
+
+    def commit(self):
+        curs = self.cursor()
+        self.clearTempTables(curs)
+        super(MockConnection, self).commit()
+
+    def clearTempTables(self, curs):
+        for table in self.temp_tables:
+            curs.execute('delete from %s' % table)
+
     def close(self):
         self.pingval = False
+        cur = self.cursor()
+        for table in self.temp_tables:
+            cur.execute('drop table %s' % table)
+
         super(MockConnection, self).close()
 
     def setup(self):
