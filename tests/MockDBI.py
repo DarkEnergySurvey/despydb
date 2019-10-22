@@ -127,6 +127,8 @@ class Slot(int):
         return str(self.value)
 
 class MockCursor(sqlite3.Cursor):
+    repl = {'nvl(': 'ifnull('}
+
     def __init__(self, *args, **kwargs):
         self._stmt = None
         self.fail = False
@@ -137,7 +139,13 @@ class MockCursor(sqlite3.Cursor):
         self._slot = -1
 
     def prepare(self, stmt):
-        self._stmt = convert_TO_DATE(stmt)
+        exstmt = self.replacevals(stmt)
+        self._stmt = convert_TO_DATE(exstmt)
+
+    def replacevals(self, stmt):
+        for k, v in self.repl.items():
+            stmt = stmt.replace(k, v)
+        return stmt
 
     def execute(self, stmt, params=()):
         if params:
@@ -150,7 +158,8 @@ class MockCursor(sqlite3.Cursor):
                 for k, val in params.items():
                     params[k] = convert_TO_DATE(val)
         if stmt:
-            return super(MockCursor, self).execute(convert_TO_DATE(stmt), params)
+            exstmt = self.replacevals(stmt)
+            return super(MockCursor, self).execute(convert_TO_DATE(exstmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
 
     def var(self, _type):
