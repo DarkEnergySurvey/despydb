@@ -127,7 +127,8 @@ class Slot(int):
         return str(self.value)
 
 class MockCursor(sqlite3.Cursor):
-    repl = {'nvl(': 'ifnull('}
+    repl = {'nvl(': 'ifnull(',
+            'NVL(': 'ifnull('}
 
     def __init__(self, *args, **kwargs):
         self._stmt = None
@@ -143,6 +144,8 @@ class MockCursor(sqlite3.Cursor):
         self._stmt = convert_TO_DATE(exstmt)
 
     def replacevals(self, stmt):
+        if 'select USER, table_name' in stmt and stmt.count('UNION') == 3:
+            return "select user,table_name,preference from ingest_test"
         for k, v in self.repl.items():
             stmt = stmt.replace(k, v)
         return stmt
@@ -158,7 +161,10 @@ class MockCursor(sqlite3.Cursor):
                 for k, val in params.items():
                     params[k] = convert_TO_DATE(val)
         if stmt:
+            if stmt.startswith('commit'):
+                return
             exstmt = self.replacevals(stmt)
+            #print exstmt
             return super(MockCursor, self).execute(convert_TO_DATE(exstmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
 
@@ -189,7 +195,8 @@ class MockCursor(sqlite3.Cursor):
             #self.execute('commit')
 
         elif procname == 'createObjectsTable':
-            pass
+            [temptable, space, table] = procargs
+            self.execute("create table " + temptable + " as select * from " + table + " where 0=1")
         elif procname == 'pMergeObjects':
             pass
         elif procname.endswith('.pMergeObjects'):
