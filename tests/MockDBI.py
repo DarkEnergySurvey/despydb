@@ -138,6 +138,16 @@ class MockCursor(sqlite3.Cursor):
             del kwargs['fail']
         sqlite3.Cursor.__init__(self, *args, **kwargs)
         self._slot = -1
+        self.num = None
+
+    def fetchall(self):
+        if self.num is None:
+            return super(MockCursor, self).fetchall()
+        retv = []
+        for i in range(1, self.num + 1):
+            retv.append((i,))
+        self.num = None
+        return retv
 
     def prepare(self, stmt):
         exstmt = self.replacevals(stmt)
@@ -146,6 +156,9 @@ class MockCursor(sqlite3.Cursor):
     def replacevals(self, stmt):
         if 'select USER, table_name' in stmt and stmt.count('UNION') == 3:
             return "select user,table_name,preference from ingest_test"
+        if '.nextval from dual' in stmt and 'connect by' in stmt:
+            self.num = int(stmt[stmt.rfind('<') + 1:])
+            return None
         for k, v in self.repl.items():
             stmt = stmt.replace(k, v)
         return stmt
@@ -164,9 +177,30 @@ class MockCursor(sqlite3.Cursor):
             if stmt.startswith('commit'):
                 return
             exstmt = self.replacevals(stmt)
+            if exstmt is None:
+                return
             #print exstmt
             return super(MockCursor, self).execute(convert_TO_DATE(exstmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
+
+    def executemany(self, stmt, params):
+        if params:
+            if isinstance(params, (tuple, list, set)):
+                newpar = []
+                for par in params:
+                    newpar.append(convert_TO_DATE(par))
+                params = newpar
+            elif isinstance(params, dict):
+                for k, val in params.items():
+                    params[k] = convert_TO_DATE(val)
+
+        if stmt:
+            exstmt = self.replacevals(stmt)
+            if exstmt is None:
+                return
+            #print exstmt
+            return super(MockCursor, self).executemany(convert_TO_DATE(exstmt), params)
+        return super(MockCursor, self).executemany(self._stmt, params)
 
     def var(self, _type):
         return Slot()
@@ -308,11 +342,11 @@ class MockConnection(sqlite3.Connection):
 
     def setup(self):
         """ initialize the DB """
-        print "Creating test database..."
+        #print "Creating test database..."
         files = glob.glob(os.path.join(self.home_dir, 'sqlFiles', '*.sql'))
         for fls in files:
             loc = fls.rfind('/')
-            print "   " + fls.replace('.sql', '')[loc + 1:]
+            #print "   " + fls.replace('.sql', '')[loc + 1:]
             flh = open(fls, 'r')
             curs = self.cursor()
             curs.executescript(flh.read())
