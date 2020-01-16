@@ -1,6 +1,8 @@
-setupRequired(cxOracle 5.2.1+0)
-setupRequired(despyServiceAccess 2.0.2+0)
-setupRequired(psycopg2 2.4.6+8)
+setupRequired(cxOracle)
+setupRequired(despymisc)
+setupRequired(oracleclient)
+setupRequired(despyServiceAccess)
+
 envPrepend(PYTHONPATH, ${PRODUCT_DIR}/python)
 envPrepend(PATH, ${PRODUCT_DIR}/bin)
 

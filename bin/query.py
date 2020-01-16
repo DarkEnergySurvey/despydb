@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """
 Interact with an Oracle or postgres database from the shell.
 
@@ -60,11 +60,11 @@ import despydb
 def query_to_cur(dbh, qry, args):
     """ return a cursor to a query """
     if args.debug:
-        print >> sys.stderr, datetime.datetime.strftime(datetime.datetime.now(), "%D %H:%m:%S"), qry
+        print(datetime.datetime.strftime(datetime.datetime.now(), "%D %H:%m:%S"), qry, file=sys.stderr)
     t0 = time.time()
     cur = dbh.cursor()
     cur.execute(qry)
-    print "query took", time.time() - t0, "seconds"
+    print("query took", time.time() - t0, "seconds")
     return cur
 
 def stringify(datum, floatfmt="%8.2f"):
@@ -72,7 +72,7 @@ def stringify(datum, floatfmt="%8.2f"):
     if isinstance(datum, float):
         return floatfmt % datum
 
-    return "{0}".format(datum)
+    return f"{datum}"
 
 def printPrettyFromCursor(cur, args):
     """ print data returned from a query in nice aligned columns"""
@@ -93,7 +93,7 @@ def printPrettyFromCursor(cur, args):
     fmat = ' '.join(['{:<%d}' % width for width in widths])
     for row in rows:
         row = [stringify(r) for r in row]
-        print fmat.format(*row)
+        print(fmat.format(*row))
 
 def printCSVFromCursor(cur, args):
     """ output the query results as a CSV"""
@@ -114,7 +114,7 @@ def do1Query(dbh, qry, args):
     """ doc """
     cur = query_to_cur(dbh, qry, args)
     if args.log:
-        open(args.log, "a").write("%s: %s\n" % (time.time(), qry))
+        open(args.log, "a").write(f"{time.time()}: {qry}\n")
     if args.format == "pretty":
         printPrettyFromCursor(cur, args)
     elif args.format == "csv":
@@ -123,9 +123,8 @@ def do1Query(dbh, qry, args):
         sys.exit(1)
 
 def query(args):
-    """ doc """
-    ## FM import cx_Oracle
-    dbh = despydb.DesDbi(os.path.join(os.getenv("HOME"), ".desservices.ini"), args.section)
+    """ Send the query to the database and render the results as requested """
+    dbh = despydb.DesDbi(args.service, args.section)
     if args.query not in  "-+":
         do1Query(dbh, args.query, args)
     elif args.query == "-":
@@ -143,8 +142,10 @@ def query(args):
     dbh.close()
 
 def main():
-    """Create command line arguments"""
+    """ Parse command line arguments and pass them to the query engine
+    """
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--service', default=os.path.join(os.getenv("HOME"), ".desservices.ini"))
     parser.add_argument('--section', '-s', default='db-desoper',
                         help='section in the .desservices file w/ DB connection information')
     parser.add_argument('--debug', '-d', help='print debug info', default=False, action='store_true')
