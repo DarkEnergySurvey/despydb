@@ -50,25 +50,25 @@ _MODULE_NAME = _MODULE_NAME[:48]
 _TYPE_MAP = {cx_Oracle.BINARY       : bytearray,
              cx_Oracle.BFILE        : cx_Oracle.BFILE,
              cx_Oracle.BLOB         : bytearray,
-             cx_Oracle.CLOB         : unicode,
+             cx_Oracle.CLOB         : str,
              cx_Oracle.CURSOR       : cx_Oracle.CURSOR,
              cx_Oracle.DATETIME     : datetime.datetime,
              cx_Oracle.FIXED_CHAR   : str,
-             cx_Oracle.FIXED_NCHAR  : unicode,
+             cx_Oracle.FIXED_NCHAR  : str,
              #cx_Oracle.FIXED_UNICODE: unicode,
              cx_Oracle.INTERVAL     : datetime.timedelta,
              cx_Oracle.LOB          : bytearray,
              cx_Oracle.LONG_BINARY  : bytearray,
              cx_Oracle.LONG_STRING  : str,
              cx_Oracle.NATIVE_FLOAT : float,
-             cx_Oracle.NCLOB        : unicode,
+             cx_Oracle.NCLOB        : bytes,
              cx_Oracle.NUMBER       : float,
              cx_Oracle.OBJECT       : cx_Oracle.OBJECT,
              cx_Oracle.ROWID        : bytearray,
              cx_Oracle.STRING       : str,
              cx_Oracle.TIMESTAMP    : datetime.datetime,
              #cx_Oracle.UNICODE      : unicode
-             cx_Oracle.NCHAR        : unicode
+             cx_Oracle.NCHAR        : str
             }
 
 # Define some symbolic names for oracle error codes to make it clearer what
@@ -118,15 +118,14 @@ class OracleConnection(cx_Oracle.Connection):
         if access_data.get('service', None):
             kwargs['service'] = access_data['service']
         if 'sid' in kwargs:
-            cdt = "(SID=%s)" % kwargs['sid']
+            cdt = f"(SID={kwargs['sid']})"
         else:
-            cdt = "(SERVICE_NAME=%s)" % kwargs['service_name']
+            cdt = f"(SERVICE_NAME={kwargs['service_name']})"
         if 'service' in kwargs:
-            cdt += '(SERVER=%s)' % kwargs['service']
+            cdt += f"(SERVER={kwargs['service']})"
             cx_args['cclass'] = 'DESDM'
             cx_args['purity'] = cx_Oracle.ATTR_PURITY_SELF
-        dsn = ("(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%s))"
-               "(CONNECT_DATA=%s))") %(kwargs['host'], kwargs['port'], cdt)
+        dsn = f"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST={kwargs['host']})(PORT={kwargs['port']}))(CONNECT_DATA={cdt}))"
         if access_data.get('threaded', None):
             cx_args['threaded'] = True
 
@@ -169,7 +168,7 @@ class OracleConnection(cx_Oracle.Connection):
         """
 
         curs = self.cursor()
-        curs.execute('SELECT * FROM %s WHERE 0=1' % table_name)
+        curs.execute(f'SELECT * FROM {table_name} WHERE 0=1')
 
         types = {d[0].lower(): _TYPE_MAP[d[1]] for d in curs.description}
 
@@ -186,7 +185,7 @@ class OracleConnection(cx_Oracle.Connection):
                 The format string.
         """
 
-        return 'SELECT %s FROM DUAL'
+        return 'SELECT {} FROM DUAL'
 
     def get_named_bind_string(self, name):
         """ Return a named bind(substitution) string for name with cx_Oracle.
@@ -218,7 +217,7 @@ class OracleConnection(cx_Oracle.Connection):
                 The properly formatted binding string.
         """
 
-        return ":%d" % pos
+        return f":{pos:d}"
 
     def get_regex_format(self, case_sensitive=True):
         """ Return a format string for constructing a regular expression clause.
@@ -277,7 +276,7 @@ class OracleConnection(cx_Oracle.Connection):
 
         """
 
-        stmt = 'DROP SEQUENCE %s' % seq_name
+        stmt = f'DROP SEQUENCE {seq_name}'
 
         curs = self.cursor()
         try:
@@ -297,7 +296,7 @@ class OracleConnection(cx_Oracle.Connection):
                 The name of the table to drop.
         """
 
-        stmt = 'DROP TABLE %s' % table
+        stmt = f'DROP TABLE {table}'
 
         curs = self.cursor()
         try:

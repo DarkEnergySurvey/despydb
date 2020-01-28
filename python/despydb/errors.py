@@ -56,7 +56,7 @@ class UnknownDBTypeError(NotImplementedError):
     def __init__(self, db_type, msg=None):
         self.db_type = db_type
         if not msg:
-            msg = 'database type: "%s"' % self.db_type
+            msg = f'database type: "{self.db_type}"'
 
         NotImplementedError.__init__(self, msg)
 
@@ -76,6 +76,6 @@ class UnknownCaseSensitiveError(NotImplementedError):
     def __init__(self, value, msg=None):
         self.value = value
         if not msg:
-            msg = 'Unknown case sensitivity value: "%s"' % value
+            msg = f'Unknown case sensitivity value: "{value}"'
 
         NotImplementedError.__init__(self, msg)
