@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # pylint: skip-file
 
 import unittest
@@ -8,7 +8,7 @@ import stat
 import datetime
 import sqlite3
 from contextlib import contextmanager
-from StringIO import StringIO
+from io import StringIO
 from mock import patch, MagicMock
 
 from despydb.oracon import OracleConnection, _ORA_NO_TABLE_VIEW, _ORA_NO_SEQUENCE, _TYPE_MAP
@@ -62,6 +62,7 @@ class MockOracle(object):
         self.count += 1
         return self.Cursor(self.value, self.count)
 
+"""
 class MockPostgres(object):
     def __init__(self, user, password, **kwargs):
         self.user = user
@@ -98,14 +99,14 @@ class MockPostgres(object):
     def cursor(self):
         self.count += 1
         return self.Cursor(self.value, self.count)
-
+"""
 def modifyOracle():
     global OracleConnection
     OracleConnection = type('OracleConnection', (MockOracle, ), dict(OracleConnection.__dict__))
 
-def modifyPostgres():
-    global PostgresConnection
-    PostgresConnection = type('PostgresConnection', (MockPostgres, ), dict(PostgresConnection.__dict__))
+#def modifyPostgres():
+#    global PostgresConnection
+#    PostgresConnection = type('PostgresConnection', (MockPostgres, ), dict(PostgresConnection.__dict__))
 
 def raiseMissing():
     raise errors.MissingDBId()
@@ -277,7 +278,7 @@ port    =   0
         os.unlink(cls.sfile)
 
     def test_init(self):
-        dbh = desdbi.DesDbi(connection=self.dbh)
+        #dbh = desdbi.DesDbi(connection=self.dbh)
 
         dbh = desdbi.DesDbi(self.sfile, 'db-test')
 
@@ -312,7 +313,7 @@ port    =   0
     def test_reconnect(self):
         dbh = desdbi.DesDbi(self.sfile, 'db-test')
         self.assertTrue(dbh.ping())
-        with capture_output() as (out, err):
+        with capture_output() as (out, _):
             dbh.reconnect()
             output = out.getvalue().strip()
             self.assertTrue('still good' in output)
@@ -406,7 +407,7 @@ port    =   0
         self.assertRaises(TypeError, self.dbh.query_simple, None)
         res = self.dbh.query_simple('OPS_ARCHIVE_VAL')
         self.assertEqual(len(res), 5)
-        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', ['name','val'], ["key='endpoint'", "val='decahttp'"])
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', ['name','val'], ["key='endpoint'", "val='desar2'"])
         self.assertEqual(len(res), 1)
         res = self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'")
         self.assertEqual(len(res), 1)
@@ -417,7 +418,7 @@ port    =   0
         self.assertEqual(res[0]['attribute_name'], 'a_image')
         self.assertRaises(TypeError, self.dbh.query_simple, 'OPS_ARCHIVE_VAL', None)
 
-        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', ['name','val'], ["key=:1", "val=:2"], params=('endpoint','decahttp'))
+        res = self.dbh.query_simple('OPS_ARCHIVE_VAL', ['name','val'], ["key=:1", "val=:2"], params=('endpoint','desar2'))
         self.assertEqual(len(res), 1)
 
         self.assertTrue(isinstance(self.dbh.query_simple('OPS_ARCHIVE_VAL', "name,val", "key='endpoint'", rowtype=tuple)[0], tuple))
@@ -436,7 +437,10 @@ port    =   0
     def test_table_drop(self):
         cur = self.dbh.cursor()
         cur.execute('select * from image')
+        cur.close()
         self.dbh.table_drop('image')
+        #cur.execute("commit")
+        cur = self.dbh.cursor()
         self.assertRaises(sqlite3.OperationalError, cur.execute, 'select * from image')
 
     def test_is_oracle(self):
