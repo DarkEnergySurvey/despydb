@@ -5,4 +5,3 @@ CREATE TABLE "OPS_ARCHIVE" (
 "FILEMGMT" TEXT NOT NULL,
 "FILEUTILS" TEXT NOT NULL,
 PRIMARY KEY ("NAME"));
-INSERT INTO OPS_ARCHIVE (NAME,SITE,ROOT,FILEMGMT,FILEUTILS) VALUES ('decarchive',NULL,'/decade/decarchive','filemgmt.filemgmt_db.FileMgmtDB','filemgmt.fileutils.FileUtils');

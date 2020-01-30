@@ -1,0 +1,6 @@
+CREATE TRIGGER PFW_ATTEMPT_STATE
+after insert on PFW_ATTEMPT
+begin
+insert into ATTEMPT_STATE(PFW_ATTEMPT_ID)
+values (new.ID);
+end;
