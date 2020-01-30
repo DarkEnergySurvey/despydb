@@ -2,8 +2,6 @@
     Module for mocking a des db connection
 """
 # pylint: skip-file
-
-
 import sqlite3
 
 import datetime
@@ -79,7 +77,7 @@ def find_balance(stmt, start):
                 return i + start + 1
     raise Exception("Unbalanced parentheses found")
 
-def convert_TO_DATE(stmt):
+def convert_PROCEDURES(stmt):
     """ Function to convert Oracle TO_DATE statement into a timestamp useable
         by sqlite3.
 
@@ -93,30 +91,82 @@ def convert_TO_DATE(stmt):
         str
             The sql statement with the appropriate replacements made.
     """
-    if not isinstance(stmt, str):
+    if not isinstance(stmt, (str, bytes)):
+        #print "RETURNING",stmt
         return stmt
-    loc = stmt.find('TO_DATE')
-    while loc > -1:
-        end = find_balance(stmt, loc)
-        repl = stmt[loc:end]
-        orig = stmt[loc:end]
-        repl = repl[repl.find('(') + 1: -1].strip()
-        sp = repl.split(',')
-        sp.reverse()
-        dstr = sp.pop()
-        if len(sp) != 2:
-            try:
-                while dstr.count("'")%2 != 0:
-                    dstr += sp.pop()
-            except IndexError:
-                raise Exception('Unbalanced quotes in expresion.')
-        dstr = dstr.replace("'", '')
-        dval = adapt_timestamp(parser.parse(dstr))
-        stmt = stmt.replace(orig, dval)
-        loc = stmt.find('TO_DATE')
+    if isinstance(stmt, bytes):
+        stmt = stmt.decode()
+    for item in ['TO_DATE', 'TO_TIMESTAMP']:
+        #print 'STMT',stmt
+        loc = stmt.find(item)
+        while loc > -1:
+            #print stmt
+            end = find_balance(stmt, loc)
+            repl = stmt[loc:end]
+            orig = stmt[loc:end]
+            repl = repl[repl.find('(') + 1: -1].strip()
+            sp = repl.split(',')
+
+            sp.reverse()
+            dstr = sp.pop()
+            if len(sp) != 2:
+                try:
+                    while dstr.count("'")%2 != 0:
+                        dstr += sp.pop()
+                except IndexError:
+                    raise Exception('Unbalanced quotes in expresion.')
+            dstr = dstr.strip()
+            dval = ''
+            if dstr.find("'") < 0 and dstr.find('"') < 0:
+                if dstr.startswith(':'):
+                    dval = dstr
+            else:
+                dstr = dstr.replace("'", '')
+                dval = adapt_timestamp(parser.parse(dstr))
+            stmt = stmt.replace(orig, dval)
+            loc = stmt.find(item)
+            #print ' ------ ',stmt
+    for item in ['NULLCMP', 'nullcmp']:
+        loc = stmt.find(item)
+        while loc > -1:
+            #print stmt
+            end = find_balance(stmt, loc)
+            repl = stmt[loc:end]
+            orig = stmt[loc:end]
+            repl = repl[repl.find('(') + 1: -1].strip()
+            sp = repl.split(',')
+            dval = 'CASE\n    WHEN ' + sp[0] + ' is NULL and ' + sp[1] + ' is NULL\n        THEN 1 \n'
+            dval += '    WHEN ' + sp[0] + ' = ' + sp[1] + '\n        THEN 1\n'
+            dval += '    ELSE 0\n'
+            dval += 'END '
+            stmt = stmt.replace(orig, dval)
+            loc = stmt.find(item)
+            #print ' +++++++ ', stmt
+    if '||' in stmt:
+        temp = stmt.split('||')
+        # may need something more complex
+        t1 = temp[0].split(',')[-1]
+        t1 = t1.split()[-1]
+        t2 = temp[1].split(',')[0]
+        t2 = t2.split()[0]
+        nstmt = "COALESCE(" + t1 + ", '') || COALESCE(" + t2 + ", '')"
+        loc1 = stmt.find(t1)
+        loc2 = stmt.find(t2) + len(t2)
+        orig = stmt[loc1: loc2]
+        stmt = stmt.replace(orig, nstmt)
+    if 'dual where exists' in stmt.lower():
+        tmp = stmt.lower().find('exists')
+        loc = stmt.lower().find('(', tmp)
+        orig = stmt[loc:]
+        orig = orig.replace('(', '', 1)
+        orig = orig.replace(')', '', 1)
+        stmt = orig
+        #print stmt
     return stmt
 
 class Slot(int):
+    """ Class to store an integer value
+    """
     def __init__(self):
         self.value = None
 
@@ -127,13 +177,15 @@ class Slot(int):
         return str(self.value)
 
 class MockCursor(sqlite3.Cursor):
+    """ Class to mock cursor interaction
+    """
     repl = {'nvl(': 'ifnull(',
             'NVL(': 'ifnull('}
 
     def __init__(self, *args, **kwargs):
         self._stmt = None
         self.fail = False
-        if ('fail' in kwargs.keys()):
+        if 'fail' in kwargs.keys():
             self.fail = kwargs['fail']
             del kwargs['fail']
         sqlite3.Cursor.__init__(self, *args, **kwargs)
@@ -141,6 +193,8 @@ class MockCursor(sqlite3.Cursor):
         self.num = None
 
     def fetchall(self):
+        """ Get all results
+        """
         if self.num is None:
             return super(MockCursor, self).fetchall()
         retv = []
@@ -150,10 +204,14 @@ class MockCursor(sqlite3.Cursor):
         return retv
 
     def prepare(self, stmt):
+        """ Prepare a query
+        """
         exstmt = self.replacevals(stmt)
-        self._stmt = convert_TO_DATE(exstmt)
+        self._stmt = convert_PROCEDURES(exstmt)
 
     def replacevals(self, stmt):
+        """ Replace specific values in a string with their sqlite3 equlvalents
+        """
         if 'select USER, table_name' in stmt and stmt.count('UNION') == 3:
             return "select user,table_name,preference from ingest_test"
         if '.nextval from dual' in stmt and 'connect by' in stmt:
@@ -164,48 +222,55 @@ class MockCursor(sqlite3.Cursor):
         return stmt
 
     def execute(self, stmt, params=()):
+        """ Execute the given query
+        """
         if params:
             if isinstance(params, (tuple, list, set)):
                 newpar = []
                 for par in params:
-                    newpar.append(convert_TO_DATE(par))
+                    newpar.append(convert_PROCEDURES(par))
                 params = newpar
             elif isinstance(params, dict):
                 for k, val in params.items():
-                    params[k] = convert_TO_DATE(val)
+                    params[k] = convert_PROCEDURES(val)
         if stmt:
             if stmt.startswith('commit'):
-                return
+                return None
             exstmt = self.replacevals(stmt)
             if exstmt is None:
-                return
-            #print exstmt
-            return super(MockCursor, self).execute(convert_TO_DATE(exstmt), params)
+                return None
+            #print "-------- STMT   ",convert_PROCEDURES(exstmt)
+            return super(MockCursor, self).execute(convert_PROCEDURES(exstmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
 
     def executemany(self, stmt, params):
+        """ Execute the given query with many inputs
+        """
         if params:
             if isinstance(params, (tuple, list, set)):
                 newpar = []
                 for par in params:
-                    newpar.append(convert_TO_DATE(par))
+                    newpar.append(convert_PROCEDURES(par))
                 params = newpar
             elif isinstance(params, dict):
                 for k, val in params.items():
-                    params[k] = convert_TO_DATE(val)
+                    params[k] = convert_PROCEDURES(val)
 
         if stmt:
             exstmt = self.replacevals(stmt)
             if exstmt is None:
-                return
+                return None
             #print exstmt
-            return super(MockCursor, self).executemany(convert_TO_DATE(exstmt), params)
+            #print params
+            return super(MockCursor, self).executemany(convert_PROCEDURES(exstmt), params)
         return super(MockCursor, self).executemany(self._stmt, params)
 
     def var(self, _type):
         return Slot()
 
     def callproc(self, procname, procargs):
+        """ Mock the calling of Oracle procedures
+        """
         if procname == 'SEM_WAIT':
             [semname, slot] = procargs
             while True:
@@ -229,7 +294,7 @@ class MockCursor(sqlite3.Cursor):
             #self.execute('commit')
 
         elif procname == 'createObjectsTable':
-            [temptable, space, table] = procargs
+            [temptable, _, table] = procargs
             self.execute("create table " + temptable + " as select * from " + table + " where 0=1")
         elif procname == 'pMergeObjects':
             pass
@@ -248,14 +313,16 @@ class MockConnection(sqlite3.Connection):
     mock_fail = False
     temp_tables = {'OPM_FILENAME_GTT': {'FILENAME': 'TEXT',
                                         'COMPRESSION' :'TEXT'},
-                    'GTT_ARTIFACT': {'FILENAME': 'TEXT',
+                   'GTT_FILENAME': {'FILENAME': 'TEXT',
+                                    'COMPRESSION' :'TEXT'},
+                   'GTT_ARTIFACT': {'FILENAME': 'TEXT',
                                     'COMPRESSION': 'TEXT',
                                     'MD5SUM': 'TEXT',
                                     'FILESIZE': 'INTEGER'},
                    'GTT_ATTEMPT': {'REQNUM': 'INTEGER',
                                    'UNITNAME': 'TEXT',
-                                    'ATTNUM': 'INTEGER'},
-                    'GTT_EXPNUM': {'EXPNUM': 'INTEGER',
+                                   'ATTNUM': 'INTEGER'},
+                   'GTT_EXPNUM': {'EXPNUM': 'INTEGER',
                                   'CCDNUM': 'INTEGER',
                                   'BAND': 'TEXT'},
                    'GTT_ID': {'ID': 'INTEGER'},
@@ -294,8 +361,8 @@ class MockConnection(sqlite3.Connection):
             shutil.rmtree(os.path.join(self.home_dir, DB_FILE))
             needSetup = True
         sqlite3.Connection.__init__(self, database=os.path.join(self.home_dir, DB_FILE),
-                                   detect_types=sqlite3.PARSE_DECLTYPES,
-                                   check_same_thread=False)
+                                    detect_types=sqlite3.PARSE_DECLTYPES,
+                                    check_same_thread=False)
         cur = self.cursor()
         cur.execute("PRAGMA synchronous = OFF")
         cur.close()
@@ -318,21 +385,29 @@ class MockConnection(sqlite3.Connection):
             self.isolation_level = ''
 
     def setupTempTables(self):
+        """ Create any temporary tables
+        """
         cur = self.cursor()
         cur.execute("PRAGMA temp_store = MEMORY")
         for table, columns in self.temp_tables.items():
             cur.execute("create temporary table if not exists %s (" % table + (',').join('"' + key + '" ' + val for key, val in columns.items()) + ')')
 
     def commit(self):
+        """ Commit any changes to disk
+        """
         curs = self.cursor()
         self.clearTempTables(curs)
         super(MockConnection, self).commit()
 
     def clearTempTables(self, curs):
+        """ Clear any temp tables
+        """
         for table in self.temp_tables:
             curs.execute('delete from %s' % table)
 
     def close(self):
+        """ Close the connection to the database
+        """
         self.pingval = False
         cur = self.cursor()
         for table in self.temp_tables:
@@ -346,8 +421,16 @@ class MockConnection(sqlite3.Connection):
         files = glob.glob(os.path.join(self.home_dir, 'sqlFiles', '*.sql'))
         for fls in files:
             loc = fls.rfind('/')
-            #print "   " + fls.replace('.sql', '')[loc + 1:]
+            #print("   " + fls.replace('.sql', '')[loc + 1:])
             flh = open(fls, 'r')
+            curs = self.cursor()
+            curs.executescript(flh.read())
+            self.commit()
+            curs.close()
+            flh.close()
+        for fls in ['INSERTS', 'TRIGGERS']:
+            #print(fls)
+            flh = open(os.path.join(self.home_dir, 'sqlFiles', fls), 'r')
             curs = self.cursor()
             curs.executescript(flh.read())
             self.commit()
@@ -355,7 +438,10 @@ class MockConnection(sqlite3.Connection):
             flh.close()
 
     def teardown(self):
-        self.close()
+        try:
+            self.close()
+        except:
+            pass
         os.unlink(os.path.join(self.home_dir, DB_FILE))
 
     @classmethod
@@ -392,8 +478,8 @@ class MockConnection(sqlite3.Connection):
         """Return a format string for a statement to execute SQL expressions."""
         if self.haveExpr:
             self.haveExpr = False
-            return '%s'
-        return 'SELECT %s FROM DUMMY'
+            return '{}'
+        return 'SELECT {} FROM DUMMY'
 
     def get_named_bind_string(self, name):
         """Return a named bind (substitution) string for name with cx_Oracle."""
@@ -423,7 +509,7 @@ class MockConnection(sqlite3.Connection):
         else:
             raise errors.UnknownCaseSensitiveError(value=case_sensitive)
 
-        return "%(target)s REGEXP %(pattern)s"
+        return "{target:s} REGEXP {pattern:s}"
 
     def get_seq_next_clause(self, seqname):
         "Return an SQL expression that extracts the next value from a sequence."
@@ -451,7 +537,7 @@ class MockConnection(sqlite3.Connection):
         try:
             curs.execute(stmt)
         except sqlite3.OperationalError:
-            pass
+            raise
         finally:
             curs.close()
 
