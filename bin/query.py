@@ -117,10 +117,8 @@ def do1Query(dbh, qry, args):
         open(args.log, "a").write(f"{time.time()}: {qry}\n")
     if args.format == "pretty":
         printPrettyFromCursor(cur, args)
-    elif args.format == "csv":
+    else: # CSV output
         printCSVFromCursor(cur, args)
-    else:
-        sys.exit(1)
 
 def query(args):
     """ Send the query to the database and render the results as requested """
@@ -131,9 +129,7 @@ def query(args):
         line = sys.stdin.readline()
         while line:
             line = line.strip()
-            if line.startswith('END'): # avoid an infinite wait when testing
-                break
-            elif not line or line.startswith("#"):
+            if not line or line.startswith("#"):
                 pass
             else:
                 do1Query(dbh, line, args)
