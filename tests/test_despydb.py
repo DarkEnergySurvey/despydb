@@ -129,7 +129,7 @@ def raiseUnCase():
 def raiseUnCaseMsg(msg):
     raise errors.UnknownCaseSensitiveError('xyz', msg)
 
-'''
+
 class TestErrors(unittest.TestCase):
     def test_missingDBid(self):
         msg = 'Bad identifier.'
@@ -146,7 +146,7 @@ class TestErrors(unittest.TestCase):
         msg = 'Bad case value'
         self.assertRaisesRegexp(errors.UnknownCaseSensitiveError, 'xyz', raiseUnCase)
         self.assertRaisesRegexp(errors.UnknownCaseSensitiveError, msg, raiseUnCaseMsg, msg)
-'''
+
 QUERY = "select * from OPS_ARCHIVE_VAL"
 class TestQuery(unittest.TestCase):
     @classmethod
@@ -222,7 +222,7 @@ port    =   0
             self.assertTrue('desar2home' in output)
         sys.argv = deepcopy(argv)
 
-'''
+
 class TestOracon(unittest.TestCase):
 
     @classmethod
@@ -586,6 +586,6 @@ port    =   0
         self.assertRaisesRegexp(Exception, '0 rows', self.dbh.basic_update_row, 'dummy', {'junk': 86}, {'name': None})
 
         self.assertRaises(Exception, self.dbh.basic_update_row, 'dummy2', {'junk': 89}, {'name': 'TASK_SEQ'})
-'''
+
 if __name__ == '__main__':
     unittest.main()
