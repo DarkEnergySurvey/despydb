@@ -134,7 +134,7 @@ def query(args):
             else:
                 do1Query(dbh, line, args)
             line = sys.stdin.readline()
-    elif args.query == "+":
+    else:   #if args.query == "+":
         lines = sys.stdin.read()
         do1Query(dbh, lines, args)
     dbh.close()
