@@ -129,6 +129,7 @@ def raiseUnCase():
 def raiseUnCaseMsg(msg):
     raise errors.UnknownCaseSensitiveError('xyz', msg)
 
+'''
 class TestErrors(unittest.TestCase):
     def test_missingDBid(self):
         msg = 'Bad identifier.'
@@ -145,12 +146,13 @@ class TestErrors(unittest.TestCase):
         msg = 'Bad case value'
         self.assertRaisesRegexp(errors.UnknownCaseSensitiveError, 'xyz', raiseUnCase)
         self.assertRaisesRegexp(errors.UnknownCaseSensitiveError, msg, raiseUnCaseMsg, msg)
-
+'''
+QUERY = "select * from OPS_ARCHIVE_VAL"
 class TestQuery(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sfile = 'services.ini'
-        cls.qry = "select * from OPS_ARCHIVE_VAL"
+        cls.qry = QUERY
 
         open(cls.sfile, 'w').write("""
 
@@ -198,21 +200,29 @@ port    =   0
             self.assertTrue('desar2home' in output)
         sys.argv = deepcopy(argv)
 
-    def test_query_stdin(self):
-        #my_env = os.environ.copy()
-        argv = ['query.py', '--service', self.sfile, '--section', 'db-test','-']
-        prc = Popen(argv, stdin=PIPE, stderr=STDOUT, stdout=PIPE, text=True)
-        output = prc.communicate('#\n' + self.qry + '\nEND\n', timeout=15)
-        self.assertTrue('query took' in output[0])
-        self.assertTrue('desar2home' in output[0])
+    @patch('query.sys.stdin.readline', side_effect=['#', QUERY, 'END'])
+    def test_query_multiline_stdin(self, ptc):
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--service', self.sfile, '--section', 'db-test', '-']
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+        sys.argv = deepcopy(argv)
 
-        argv = ['query.py', '--service', self.sfile, '--section', 'db-test','+']
-        prc = Popen(argv, stdin=PIPE, stderr=STDOUT, stdout=PIPE, text=True)
-        output = prc.communicate(self.qry, timeout=15)
-        self.assertTrue('query took' in output[0])
-        self.assertTrue('desar2home' in output[0])
+    @patch('query.sys.stdin.read', side_effect=[QUERY])
+    def test_query_singleline_stdin(self, ptc):
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--service', self.sfile, '--section', 'db-test', '+']
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+        sys.argv = deepcopy(argv)
 
-
+'''
 class TestOracon(unittest.TestCase):
 
     @classmethod
@@ -576,6 +586,6 @@ port    =   0
         self.assertRaisesRegexp(Exception, '0 rows', self.dbh.basic_update_row, 'dummy', {'junk': 86}, {'name': None})
 
         self.assertRaises(Exception, self.dbh.basic_update_row, 'dummy2', {'junk': 89}, {'name': 'TASK_SEQ'})
-
+'''
 if __name__ == '__main__':
     unittest.main()
