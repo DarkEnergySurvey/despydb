@@ -190,7 +190,7 @@ port    =   0
 
     def test_query(self):
         argv = deepcopy(sys.argv)
-        sys.argv = ['query.py', '--section', 'db-test', self.qry]
+        sys.argv = ['query.py', '--service', self.sfile, '--section', 'db-test', self.qry]
         with capture_output() as (out, _):
             query.main()
             output = out.getvalue().strip()
@@ -200,13 +200,13 @@ port    =   0
 
     def test_query_stdin(self):
         #my_env = os.environ.copy()
-        argv = ['query.py', '--section', 'db-test','-']
+        argv = ['query.py', '--service', self.sfile, '--section', 'db-test','-']
         prc = Popen(argv, stdin=PIPE, stderr=STDOUT, stdout=PIPE, text=True)
         output = prc.communicate('#\n' + self.qry + '\nEND\n', timeout=15)
         self.assertTrue('query took' in output[0])
         self.assertTrue('desar2home' in output[0])
 
-        argv = ['query.py', '--section', 'db-test','+']
+        argv = ['query.py', '--service', self.sfile, '--section', 'db-test','+']
         prc = Popen(argv, stdin=PIPE, stderr=STDOUT, stdout=PIPE, text=True)
         output = prc.communicate(self.qry, timeout=15)
         self.assertTrue('query took' in output[0])
