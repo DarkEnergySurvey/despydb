@@ -200,7 +200,7 @@ port    =   0
             self.assertTrue('desar2home' in output)
         sys.argv = deepcopy(argv)
 
-    @patch('query.sys.stdin.readline', side_effect=['#', QUERY, 'END'])
+    @patch('query.sys.stdin.readline', side_effect=['#', QUERY, ''])
     def test_query_multiline_stdin(self, ptc):
         argv = deepcopy(sys.argv)
         sys.argv = ['query.py', '--service', self.sfile, '--section', 'db-test', '-']
@@ -220,6 +220,83 @@ port    =   0
             output = out.getvalue().strip()
             self.assertTrue('query took' in output)
             self.assertTrue('desar2home' in output)
+        sys.argv = deepcopy(argv)
+
+    def test_query_log(self):
+        logfile = 'test.log'
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--service', self.sfile, '--log', logfile,
+                    '--section', 'db-test', self.qry]
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+        self.assertTrue(self.qry in open(logfile, 'r').readline())
+        sys.argv = deepcopy(argv)
+        os.unlink(logfile)
+
+    def test_pretty_print(self):
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--service', self.sfile, '--header', '--section', 'db-test',
+                    self.qry]
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+            self.assertTrue('NAME' in output)
+
+        sys.argv = ['query.py', '--service', self.sfile, '--header', '--section', 'db-test',
+                    'select * from PFW_ATTEMPT where reqnum=-5']
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+
+        sys.argv = deepcopy(argv)
+
+    def test_debug(self):
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--service', self.sfile, '--debug', '--section', 'db-test',
+                    self.qry]
+        output = ''
+        with capture_output() as (out, err):
+            query.main()
+            output = out.getvalue().strip()
+            errput = err.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+            self.assertTrue(self.qry in errput)
+        sys.argv = deepcopy(argv)
+
+    def test_csv(self):
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--service', self.sfile, '--header', '--format', 'csv', '--section',
+                    'db-test', self.qry]
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+            self.assertTrue('NAME' in output)
+
+        sys.argv = ['query.py', '--service', self.sfile, '--header', '--format', 'csv', '--section',
+                    'db-test', 'select * from PFW_ATTEMPT where reqnum=-5']
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+
+        sys.argv = ['query.py', '--service', self.sfile, '--format', 'csv', '--section', 'db-test',
+                    self.qry]
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+            self.assertTrue('NAME' not in output)
+
         sys.argv = deepcopy(argv)
 
 
