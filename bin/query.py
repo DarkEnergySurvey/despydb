@@ -125,13 +125,15 @@ def do1Query(dbh, qry, args):
 def query(args):
     """ Send the query to the database and render the results as requested """
     dbh = despydb.DesDbi(args.service, args.section)
-    if args.query not in  "-+":
+    if args.query not in "-+":
         do1Query(dbh, args.query, args)
     elif args.query == "-":
         line = sys.stdin.readline()
         while line:
             line = line.strip()
-            if not line or line.startswith("#"):
+            if line.startswith('END'): # avoid an infinite wait when testing
+                break
+            elif not line or line.startswith("#"):
                 pass
             else:
                 do1Query(dbh, line, args)
