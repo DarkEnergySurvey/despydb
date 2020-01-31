@@ -2,6 +2,7 @@
 # pylint: skip-file
 
 import unittest
+from copy import deepcopy
 import sys
 import os
 import stat
@@ -10,11 +11,13 @@ import sqlite3
 from contextlib import contextmanager
 from io import StringIO
 from mock import patch, MagicMock
+from subprocess import Popen, PIPE, STDOUT
 
 from despydb.oracon import OracleConnection, _ORA_NO_TABLE_VIEW, _ORA_NO_SEQUENCE, _TYPE_MAP
 import despydb.errors as errors
 import despydb.desdbi as desdbi
 import cx_Oracle as cxo
+import query
 from MockDBI import MockConnection, convert_timestamp
 
 @contextmanager
@@ -142,6 +145,72 @@ class TestErrors(unittest.TestCase):
         msg = 'Bad case value'
         self.assertRaisesRegexp(errors.UnknownCaseSensitiveError, 'xyz', raiseUnCase)
         self.assertRaisesRegexp(errors.UnknownCaseSensitiveError, msg, raiseUnCaseMsg, msg)
+
+class TestQuery(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sfile = 'services.ini'
+        cls.qry = "select * from OPS_ARCHIVE_VAL"
+
+        open(cls.sfile, 'w').write("""
+
+[db-maximal]
+PASSWD  =   maximal_passwd
+name    =   maximal_name_1    ; if repeated last name wins
+user    =   maximal_name      ; if repeated key, last one wins
+Sid     =   maximal_sid       ;comment glued onto value not allowed
+type    =   POSTgres
+server  =   maximal_server
+
+[db-minimal]
+USER    =   Minimal_user
+PASSWD  =   Minimal_passwd
+name    =   Minimal_name
+sid     =   Minimal_sid
+server  =   Minimal_server
+type    =   oracle
+
+[db-test]
+USER    =   Minimal_user
+PASSWD  =   Minimal_passwd
+name    =   Minimal_name
+sid     =   Minimal_sid
+server  =   Minimal_server
+type    =   test
+port    =   0
+""")
+        os.chmod(cls.sfile, (0xffff & ~(stat.S_IROTH | stat.S_IWOTH | stat.S_IRGRP | stat.S_IWGRP )))
+        cls.dbh = desdbi.DesDbi(cls.sfile, 'db-test')
+
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.dbh.con.teardown()
+        os.unlink(cls.sfile)
+
+    def test_query(self):
+        argv = deepcopy(sys.argv)
+        sys.argv = ['query.py', '--section', 'db-test', self.qry]
+        with capture_output() as (out, _):
+            query.main()
+            output = out.getvalue().strip()
+            self.assertTrue('query took' in output)
+            self.assertTrue('desar2home' in output)
+        sys.argv = deepcopy(argv)
+
+    def test_query_stdin(self):
+        #my_env = os.environ.copy()
+        argv = ['query.py', '--section', 'db-test','-']
+        prc = Popen(argv, stdin=PIPE, stderr=STDOUT, stdout=PIPE, text=True)
+        output = prc.communicate('#\n' + self.qry + '\nEND\n', timeout=15)
+        self.assertTrue('query took' in output[0])
+        self.assertTrue('desar2home' in output[0])
+
+        argv = ['query.py', '--section', 'db-test','+']
+        prc = Popen(argv, stdin=PIPE, stderr=STDOUT, stdout=PIPE, text=True)
+        output = prc.communicate(self.qry, timeout=15)
+        self.assertTrue('query took' in output[0])
+        self.assertTrue('desar2home' in output[0])
 
 
 class TestOracon(unittest.TestCase):
