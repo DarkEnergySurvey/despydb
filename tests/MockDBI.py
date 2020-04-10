@@ -1,7 +1,13 @@
 """
-    Module for mocking a des db connection
+    Module for mocking a DES db connection.
+
+    This module will create an sqlite database in order to mock the real DES oracle database for
+    local testing purposes. It is instantiated and used in the same fashion as the oracle database
+    via despydb.desdbi.DesDbi or one of its subclasses. Sqlite3 databases in python are effectively
+    single threaded due to file locking etc in the sqlite3. This module attempts to mimic
+    multi-thread access to the database by instantiating a singleton for the actual interface. But it
+    is not perfect and may not always behave as expected.
 """
-# pylint: skip-file
 import sqlite3
 
 import datetime
@@ -48,16 +54,48 @@ _ORA_NO_TABLE_VIEW = 942    # table or view does not exist
 _ORA_NO_SEQUENCE = 2289   # sequence does not exist
 
 def adapt_timestamp(data):
-    """ convert a datetime to a timestamp string """
+    """ Convert a datetime to a timestamp string
+
+        Parameters
+        ----------
+        data : datetime
+            The datetime to be converted
+
+        Returns
+        -------
+        str of the input datetime, in timestamp format
+    """
     return str(time.mktime(data.timetuple()))
 
 def convert_timestamp(data):
-    """ convert a timestamp to a datetime object """
+    """ Convert a timestamp to a datetime object
+
+        Parameters
+        ----------
+        date : str
+            The timestamp to be converted into a datetime
+
+        Returns
+        -------
+        datetime object representing the input
+    """
     return datetime.datetime.fromtimestamp(float(data))
 
-def find_balance(stmt, start):
+def find_balance(stmt, start=0):
     """ Function to find the outermost set of balanced parentheses.
 
+        Parameters
+        ----------
+        stmt: str
+            The string to look for the balanced parentheses in.
+
+        start: int
+            The index to start at. Default is 0.
+
+        Returns
+        -------
+        int indicating the index + 1 of the location of the closing parentheses. Useful in slicing
+        an array.
     """
     open_list = ['(']
     close_list = [')']
@@ -92,15 +130,12 @@ def convert_PROCEDURES(stmt):
             The sql statement with the appropriate replacements made.
     """
     if not isinstance(stmt, (str, bytes)):
-        #print "RETURNING",stmt
         return stmt
     if isinstance(stmt, bytes):
         stmt = stmt.decode()
     for item in ['TO_DATE', 'TO_TIMESTAMP']:
-        #print 'STMT',stmt
         loc = stmt.find(item)
         while loc > -1:
-            #print stmt
             end = find_balance(stmt, loc)
             repl = stmt[loc:end]
             orig = stmt[loc:end]
@@ -125,11 +160,10 @@ def convert_PROCEDURES(stmt):
                 dval = adapt_timestamp(parser.parse(dstr))
             stmt = stmt.replace(orig, dval)
             loc = stmt.find(item)
-            #print ' ------ ',stmt
+
     for item in ['NULLCMP', 'nullcmp']:
         loc = stmt.find(item)
         while loc > -1:
-            #print stmt
             end = find_balance(stmt, loc)
             repl = stmt[loc:end]
             orig = stmt[loc:end]
@@ -141,7 +175,7 @@ def convert_PROCEDURES(stmt):
             dval += 'END '
             stmt = stmt.replace(orig, dval)
             loc = stmt.find(item)
-            #print ' +++++++ ', stmt
+
     if '||' in stmt:
         temp = stmt.split('||')
         # may need something more complex
@@ -161,7 +195,6 @@ def convert_PROCEDURES(stmt):
         orig = orig.replace('(', '', 1)
         orig = orig.replace(')', '', 1)
         stmt = orig
-        #print stmt
     return stmt
 
 class Slot(int):
@@ -177,7 +210,12 @@ class Slot(int):
         return str(self.value)
 
 class MockCursor(sqlite3.Cursor):
-    """ Class to mock cursor interaction
+    """ Class to mock cursor interaction. Can be used just like an oracle cursor. Oracle specific
+        commands are interpreted and converted to sqlite versions, although this is not guaranteed.
+        DES oracle procedures are also converted.
+
+        The fail argument is used to force a failure in certain proceedures. All other arguments are
+        passed to the sqlite3.Cursor.__init__
     """
     repl = {'nvl(': 'ifnull(',
             'NVL(': 'ifnull('}
@@ -193,7 +231,11 @@ class MockCursor(sqlite3.Cursor):
         self.num = None
 
     def fetchall(self):
-        """ Get all results
+        """ Get all results from the last query
+
+            Returns
+            -------
+            tuple of tuples, one for each row.
         """
         if self.num is None:
             return super(MockCursor, self).fetchall()
@@ -204,13 +246,32 @@ class MockCursor(sqlite3.Cursor):
         return retv
 
     def prepare(self, stmt):
-        """ Prepare a query
+        """ This mimics the typical prepare call of other database types.
+
+            Parameters
+            ----------
+            stmt: str
+                The statement to prepare for execution later.
+
         """
         exstmt = self.replacevals(stmt)
         self._stmt = convert_PROCEDURES(exstmt)
 
     def replacevals(self, stmt):
         """ Replace specific values in a string with their sqlite3 equlvalents
+            The following are currently handled:
+            - some unions
+            - getting the next sequence value
+            - nvl and NVL
+
+            Parameters
+            ----------
+            stmt : str
+                The statement to do the replacement on
+
+            Returns
+            -------
+            str containing the modified statement.
         """
         if 'select USER, table_name' in stmt and stmt.count('UNION') == 3:
             return "select user,table_name,preference from ingest_test"
@@ -222,8 +283,17 @@ class MockCursor(sqlite3.Cursor):
         return stmt
 
     def execute(self, stmt, params=()):
-        """ Execute the given query
+        """ Execute the given query, substituting in any parameters.
+
+            Parameters
+            ----------
+            stmt : str
+                The sql statement to execute, use None to execute the most recently prepared statement.
+
+            params : iterable
+                The paremters to substitue in to the query.
         """
+        # do any substitutions
         if params:
             if isinstance(params, (tuple, list, set)):
                 newpar = []
@@ -233,18 +303,27 @@ class MockCursor(sqlite3.Cursor):
             elif isinstance(params, dict):
                 for k, val in params.items():
                     params[k] = convert_PROCEDURES(val)
+        # if the statement was given do any conversions
         if stmt:
             if stmt.startswith('commit'):
                 return None
             exstmt = self.replacevals(stmt)
             if exstmt is None:
                 return None
-            #print "-------- STMT   ",convert_PROCEDURES(exstmt)
+
             return super(MockCursor, self).execute(convert_PROCEDURES(exstmt), params)
         return super(MockCursor, self).execute(self._stmt, params)
 
     def executemany(self, stmt, params):
-        """ Execute the given query with many inputs
+        """ Execute the given query with a range of inputs.
+
+            Parameters
+            ----------
+            stmt : str
+                The sql statement to execute, use None to execute the most recently prepared statement.
+
+            params : iterable
+                The paremters to substitue in to the query.
         """
         if params:
             if isinstance(params, (tuple, list, set)):
@@ -266,11 +345,28 @@ class MockCursor(sqlite3.Cursor):
         return super(MockCursor, self).executemany(self._stmt, params)
 
     def var(self, _type):
+        """ Mimic the var call.
+        """
         return Slot()
 
     def callproc(self, procname, procargs):
-        """ Mock the calling of Oracle procedures
+        """ Mock the calling of Oracle procedures. The following proceedures are handled:
+
+            - SEM_WAIT
+            - SEM_DEQUEUE
+            - SEM_SIGNAL
+            - createObjectsTable
+            - pMergeObjects
+
+            Parameters
+            ----------
+            procname: str
+                The name of the procedure.
+
+            procargs: multiple
+                Any arguments for the procedure call.
         """
+        # mimic the SEM_WAIT procedure
         if procname == 'SEM_WAIT':
             [semname, slot] = procargs
             while True:
@@ -279,23 +375,24 @@ class MockCursor(sqlite3.Cursor):
                 try:
                     slot.value = res[0][0]
                     self.execute("update SEMLOCK set IN_USE=1 where slot=%i and name='%s'" % (slot.value, semname))
-                    #self.execute('commit')
                     break
                 except IndexError:
                     if self.fail:
                         raise Exception('SEMAPHORE allocation failure')
                     time.sleep(5)
+        # mimic the SEM_DEQUEUE procedure
         elif procname == 'SEM_DEQUEUE':
             [semname, slot] = procargs
             slot.value = None
+        # mimic the SEM_SIGNAL prodecure
         elif procname == 'SEM_SIGNAL':
             [semname, slot] = procargs
             self.execute("update SEMLOCK set IN_USE=0 where slot=%i and name='%s'" % (slot.value, semname))
-            #self.execute('commit')
-
+        # mimic the createObjectsTable procedure
         elif procname == 'createObjectsTable':
             [temptable, _, table] = procargs
             self.execute("create table " + temptable + " as select * from " + table + " where 0=1")
+        # mimic the pMergeObjects procedure
         elif procname == 'pMergeObjects':
             pass
         elif procname.endswith('.pMergeObjects'):
@@ -303,14 +400,16 @@ class MockCursor(sqlite3.Cursor):
         else:
             raise Exception("Unknown proc called")
 
-class MockConnection(sqlite3.Connection):
-    """
-    Provide cx_Oracle-specific implementations of canonical database methods
+class MockConnection:
+    """ Class for mocking an oracle connection, using sqlite3. This class creates a (or uses an existing)
+        singleton instance of a connection to the sqlite3 database. It mimics the behvior of the DES
+        Oracle database, inculding procedures and global temp tables. Any given parameters are
+        passed to the connection class.
 
-    Refer to desdbi.py for full method documentation.
     """
+    __instance = None
     home_dir = None
-    mock_fail = False
+    __refcount = 0
     temp_tables = {'OPM_FILENAME_GTT': {'FILENAME': 'TEXT',
                                         'COMPRESSION' :'TEXT'},
                    'GTT_FILENAME': {'FILENAME': 'TEXT',
@@ -328,38 +427,132 @@ class MockConnection(sqlite3.Connection):
                    'GTT_ID': {'ID': 'INTEGER'},
                    'GTT_NUM': {'NUM': 'INTEGER'},
                    'GTT_STR': {'STR': 'TEXT'}}
-
-
     def __init__(self, *args, **kwargs):
-        """
-        Initialize an OracleConnection object
-
-        Connect the OracleConnection instance to the database identified in
-        access_data.
-
-        """
-        self.haveExpr = False
         self.pingval = True
+        # increment the reference counter
+        MockConnection.__refcount += 1
+        self.__closed = False
+        if MockConnection.home_dir is None:
+            filename = inspect.getframeinfo(inspect.currentframe()).filename
+            MockConnection.home_dir = os.path.dirname(os.path.abspath(filename))
+        if MockConnection.__instance is None:
+            MockConnection.__instance = _MockConnection(MockConnection.home_dir,
+                                                        MockConnection.temp_tables,
+                                                        *args, **kwargs)
+
+    def teardown(self):
+        """ Close and remove the database from disk.
+
+        """
+        try:
+            self._close(True)
+        except:
+            pass
+        try:
+            os.unlink(os.path.join(self.home_dir, DB_FILE))
+        except FileNotFoundError as _:
+            pass
+
+    @classmethod
+    def destroy(cls):
+        """ Static method to close the database and remove it from disk.
+        """
+        try:
+            MockConnection.__instance.close()
+            MockConnection.__instance = None
+            MockConnection.__refcount = 0
+        except:
+            pass
+        os.unlink(os.path.join(cls.home_dir, DB_FILE))
+
+    def close(self):
+        """ Mimic the closing of a database connection.
+        """
+        self._close()
+
+    def _close(self, force=False):
+        """ Internal method to mimic the closing of a connection as we do not want to actually close
+            the database if there are other connections through the singleton.
+
+            Parameters
+            ----------
+            force: bool
+                Whether to force the closing of the database connection. Useful when running tests.
+                Default is False, do not force it to close.
+        """
+        if not force:
+            self.__closed = True
+            self.pingval = False
+        # decrement the reference counter
+        MockConnection.__refcount -= 1
+        # if there are no mor active connections then close up
+        if MockConnection.__refcount == 0 or force:
+            MockConnection.destroy()
+
+    def ping(self):
+        """ Mimic the pinging of the database.
+
+            Returns
+            -------
+            bool
+        """
+        return self.pingval
+
+    def __getattr__(self, name):
+        """ Pass all other method calls on to the connection.
+        """
+        # if this connection is closed then throw an error
+        if self.__closed:
+            raise Exception("Cannot operate on a closed database")
+        return getattr(MockConnection.__instance, name)
+
+    @classmethod
+    def mock_fail(cls, val=None):
+        """ Static method to set/get the failure method, used for testing.
+        """
+        if val is None:
+            return _MockConnection.mock_fail
+        _MockConnection.mock_fail = val
+
+class _MockConnection(sqlite3.Connection):
+    """
+    Provide cx_Oracle-specific implementations of canonical database methods
+
+    Refer to desdbi.py for full method documentation.
+    """
+    mock_fail = False
+    def __init__(self, home_dir, temp_tables, *args, **kwargs):
+        """
+        Initialize a mimic OracleConnection object
+
+        Connect the  instance to the database identified in access_data.
+
+        """
+        self.home_dir = home_dir
+        self.temp_tables = temp_tables
+
+        self.haveExpr = False
         self.module = _MODULE_NAME
         self.type = 'MOCKDB'
         self.configdict = {'user': 'non-user',
                            'passwd': 'non-passwd',
                            'meta_file': 'non-file',
                            'meta_section': 'non-section'}
+        # register data converters
         sqlite3.register_adapter(datetime.datetime, adapt_timestamp)
         sqlite3.register_converter('TIMESTAMP', convert_timestamp)
         sqlite3.register_converter('DATE', convert_timestamp)
 
-        filename = inspect.getframeinfo(inspect.currentframe()).filename
-        MockConnection.home_dir = os.path.dirname(os.path.abspath(filename))
 
         needSetup = False
 
+        # see if the database needs to be set up
         if not os.path.exists(os.path.join(self.home_dir, DB_FILE)):
             needSetup = True
         elif not os.path.isfile(os.path.join(self.home_dir, DB_FILE)):
             shutil.rmtree(os.path.join(self.home_dir, DB_FILE))
             needSetup = True
+        # initialize the connection
         sqlite3.Connection.__init__(self, database=os.path.join(self.home_dir, DB_FILE),
                                     detect_types=sqlite3.PARSE_DECLTYPES,
                                     check_same_thread=False)
@@ -373,19 +566,23 @@ class MockConnection(sqlite3.Connection):
 
     @property
     def autocommit(self):
+        """ Getter for the autocommit flag
+        """
         if self.isolation_level is None:
             return True
         return False
 
     @autocommit.setter
     def autocommit(self, val):
+        """ Setter for the autocommit flag
+        """
         if val:
             self.isolation_level = None
         else:
             self.isolation_level = ''
 
     def setupTempTables(self):
-        """ Create any temporary tables
+        """ Create any temporary tables in memory
         """
         cur = self.cursor()
         cur.execute("PRAGMA temp_store = MEMORY")
@@ -397,7 +594,7 @@ class MockConnection(sqlite3.Connection):
         """
         curs = self.cursor()
         self.clearTempTables(curs)
-        super(MockConnection, self).commit()
+        super(_MockConnection, self).commit()
 
     def clearTempTables(self, curs):
         """ Clear any temp tables
@@ -408,15 +605,18 @@ class MockConnection(sqlite3.Connection):
     def close(self):
         """ Close the connection to the database
         """
-        self.pingval = False
         cur = self.cursor()
         for table in self.temp_tables:
             cur.execute('drop table %s' % table)
 
-        super(MockConnection, self).close()
+        super(_MockConnection, self).close()
 
     def setup(self):
-        """ initialize the DB """
+        """ Initialize the DB, creating tables and populating them with initial data, and creating triggers. This is done
+            by looking for all files ending with .sql in the sqlFiles directory and executing them.
+            All initial data are in the INSERTS file and all triggers are in the TRIGGERS file
+
+        """
         #print "Creating test database..."
         files = glob.glob(os.path.join(self.home_dir, 'sqlFiles', '*.sql'))
         for fls in files:
@@ -437,28 +637,15 @@ class MockConnection(sqlite3.Connection):
             curs.close()
             flh.close()
 
-    def teardown(self):
-        try:
-            self.close()
-        except:
-            pass
-        os.unlink(os.path.join(self.home_dir, DB_FILE))
-
-    @classmethod
-    def destroy(cls):
-        os.unlink(os.path.join(cls.home_dir, DB_FILE))
 
     def cursor(self, fetchsize=None):
         """
-        Return a cx_Oracle Cursor object for operating on the connection.
+        Return a Cursor object for operating on the connection.
 
         The fetchsize argument is ignored, but retained for compatibility
         with other connection types.
         """
-
-        # cx_Oracle doesn't implement/need named cursors, so ignore fetchsize.
-
-        return MockCursor(self, fail=MockConnection.mock_fail)
+        return MockCursor(self, fail=self.mock_fail)
 
     def get_column_types(self, table_name):
         """
@@ -487,7 +674,7 @@ class MockConnection(sqlite3.Connection):
         return ":" + name
 
     def get_positional_bind_string(self, pos=1):
-        "Return a positional bind (substitution) string for cx_Oracle."
+        """Return a positional bind (substitution) string for cx_Oracle."""
 
         return "?"
 
@@ -512,7 +699,7 @@ class MockConnection(sqlite3.Connection):
         return "{target:s} REGEXP {pattern:s}"
 
     def get_seq_next_clause(self, seqname):
-        "Return an SQL expression that extracts the next value from a sequence."
+        """Return an SQL expression that extracts the next value from a sequence."""
         seq = seqname.upper()
         c = self.cursor()
         c.execute("update sequences set junk=0 where name='%s'" % seq)
@@ -537,15 +724,16 @@ class MockConnection(sqlite3.Connection):
         try:
             curs.execute(stmt)
         except sqlite3.OperationalError:
-            raise
+            pass
         finally:
             curs.close()
 
     def from_dual(self):
+        """ Ignore calls to this as sqlite3 does not have dual.
+        """
         return ""
 
     def get_current_timestamp_str(self):
+        """ Get a timestamp of the current time.
+        """
         return str(time.mktime(datetime.datetime.now().timetuple()))
-
-    def ping(self):
-        return self.pingval
