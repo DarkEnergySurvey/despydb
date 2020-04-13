@@ -463,7 +463,10 @@ class MockConnection:
             MockConnection.__refcount = 0
         except:
             pass
-        os.unlink(os.path.join(cls.home_dir, DB_FILE))
+        try:
+            os.unlink(os.path.join(cls.home_dir, DB_FILE))
+        except:
+            pass
 
     def close(self):
         """ Mimic the closing of a database connection.
