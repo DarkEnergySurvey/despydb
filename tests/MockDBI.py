@@ -226,6 +226,9 @@ class MockCursor(sqlite3.Cursor):
         if 'fail' in kwargs.keys():
             self.fail = kwargs['fail']
             del kwargs['fail']
+        if 'results' in kwargs.keys():
+            self._results = kwargs['results']
+            del kwargs['results']
         sqlite3.Cursor.__init__(self, *args, **kwargs)
         self._slot = -1
         self.num = None
@@ -237,6 +240,8 @@ class MockCursor(sqlite3.Cursor):
             -------
             tuple of tuples, one for each row.
         """
+        if self._results is not None:
+            return self._results
         if self.num is None:
             return super(MockCursor, self).fetchall()
         retv = []
@@ -244,6 +249,12 @@ class MockCursor(sqlite3.Cursor):
             retv.append((i,))
         self.num = None
         return retv
+
+    def clearResults(self):
+        self._results = None
+
+    def setResults(self, results):
+        self._results = results
 
     def prepare(self, stmt):
         """ This mimics the typical prepare call of other database types.
@@ -533,7 +544,7 @@ class _MockConnection(sqlite3.Connection):
         """
         self.home_dir = home_dir
         self.temp_tables = temp_tables
-
+        self._results = None
         self.haveExpr = False
         self.module = _MODULE_NAME
         self.type = 'MOCKDB'
@@ -583,6 +594,12 @@ class _MockConnection(sqlite3.Connection):
             self.isolation_level = None
         else:
             self.isolation_level = ''
+
+    def fakeResults(self, results=None):
+        self._results = results
+
+    def clearResults(self):
+        self.fakeResults()
 
     def setupTempTables(self):
         """ Create any temporary tables in memory
@@ -648,7 +665,7 @@ class _MockConnection(sqlite3.Connection):
         The fetchsize argument is ignored, but retained for compatibility
         with other connection types.
         """
-        return MockCursor(self, fail=self.mock_fail)
+        return MockCursor(self, fail=self.mock_fail, results=self._results)
 
     def get_column_types(self, table_name):
         """
