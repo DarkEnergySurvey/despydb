@@ -16,6 +16,7 @@ import socket
 import os
 import inspect
 import glob
+import re
 
 import shutil
 from dateutil import parser
@@ -46,6 +47,10 @@ _TYPE_MAP = {'TEXT'      : str,
              'TIMESTAMP' : datetime.datetime,
              'DATE'      : datetime.datetime
             }
+
+_MATERIALIZE = r'/\*\s*\+\s*materialize\s*\*/'
+_COADD_IMAGE_QUERY = 'COADD_IMAGE_QUERY'
+_COADD_TILE_QUERY = 'COADD_TILE_QUERY'
 
 # Define some symbolic names for oracle error codes to make it clearer what
 # the error codes mean.
@@ -114,6 +119,38 @@ def find_balance(stmt, start=0):
             if found and not stack:
                 return i + start + 1
     raise Exception("Unbalanced parentheses found")
+
+def determine_temp_table(stmt):
+    """ Determine which special temp table is being used. This is to mimic the Oracle
+        materialize hint.
+
+    """
+    if re.search('filename', stmt, re.IGNORECASE) is not None:
+        return _COADD_IMAGE_QUERY
+    if re.search('tilename', stmt, re.IGNORECASE) is not None:
+        return _COADD_TILE_QUERY
+    raise Exception('Unknown materialize table type')
+
+def find_columns(stmt):
+    """ Determine the column names from the query.
+    """
+    columns = []
+    tstmt = stmt.upper()
+    parse = tstmt[tstmt.find("SELECT") + 6:tstmt.find("FROM")].strip().split(',')
+    for p in parse:
+        if ' AS ' in p:
+            temp = p.split()
+            temp.reverse()
+            for i, val in enumerate(temp):
+                if val == 'AS':
+                    columns.append(temp[i - 1].strip())
+                    break
+        elif re.search(r"\D+\.\D+", p) is not None:
+            columns.append(p.split('.')[-1].strip())
+        else:
+            columns.append(p)
+    return columns
+
 
 def convert_PROCEDURES(stmt):
     """ Function to convert Oracle TO_DATE statement into a timestamp useable
@@ -195,6 +232,7 @@ def convert_PROCEDURES(stmt):
         orig = orig.replace('(', '', 1)
         orig = orig.replace(')', '', 1)
         stmt = orig
+    #print(stmt)
     return stmt
 
 class Slot(int):
@@ -268,6 +306,31 @@ class MockCursor(sqlite3.Cursor):
         exstmt = self.replacevals(stmt)
         self._stmt = convert_PROCEDURES(exstmt)
 
+    def process_materialize(self, stmt):
+        """ Convert materialize statements into temporary table statements
+        """
+        tstmt = re.sub(r'\s+', ' ', stmt)
+        while re.search(_MATERIALIZE, tstmt, re.IGNORECASE) is not None:
+            loc = find_balance(tstmt)
+            mat = tstmt[:loc - 1]
+            tstmt = tstmt[loc:]
+            l2 = mat.find('(')
+            pre = mat[:l2]
+            mat = mat[l2 + 1:]
+            pres = pre.split()
+            mat = re.sub(_MATERIALIZE, '', mat)
+            if pres[-1] != 'as':
+                raise Exception('Unexpected materialize format')
+            subname = pres[-2]
+            tablename = determine_temp_table(mat)
+            columns = find_columns(mat)
+            sql = f"INSERT INTO {tablename} ({','.join(columns)}) {mat}"
+            self.execute(f"delete from {tablename}")
+            self.execute(sql)
+            tstmt = re.sub(fr'{subname}(,|\s+)', fr'{tablename} {subname}\1', tstmt, re.IGNORECASE)
+        return tstmt
+
+
     def replacevals(self, stmt):
         """ Replace specific values in a string with their sqlite3 equlvalents
             The following are currently handled:
@@ -284,6 +347,8 @@ class MockCursor(sqlite3.Cursor):
             -------
             str containing the modified statement.
         """
+        if 'materialize' in stmt:
+            stmt = self.process_materialize(stmt)
         if 'select USER, table_name' in stmt and stmt.count('UNION') == 3:
             return "select user,table_name,preference from ingest_test"
         if '.nextval from dual' in stmt and 'connect by' in stmt:
@@ -437,7 +502,24 @@ class MockConnection:
                                   'BAND': 'TEXT'},
                    'GTT_ID': {'ID': 'INTEGER'},
                    'GTT_NUM': {'NUM': 'INTEGER'},
-                   'GTT_STR': {'STR': 'TEXT'}}
+                   'GTT_STR': {'STR': 'TEXT'},
+                   _COADD_IMAGE_QUERY: {'FILENAME': 'TEXT',
+                                        'FILETYPE': 'TEXT',
+                                        'CROSSRA0': 'TEXT',
+                                        'PFW_ATTEMPT_ID': 'INTEGER',
+                                        'BAND': 'TEXT',
+                                        'CCDNUM': 'INTEGER',
+                                        'RA_CENT': 'REAL',
+                                        'DEC_CENT': 'REAL',
+                                        'RA_SIZE_CCD': 'REAL',
+                                        'DEC_SIZE_CCD': 'REAL'},
+                   _COADD_TILE_QUERY: {'TILENAME': 'TEXT',
+                                       'RA_SIZE': 'REAL',
+                                       'DEC_SIZE': 'REAL',
+                                       'DEC_CENT': 'REAL',
+                                       'RA_CENT': 'REAL'}
+                   }
+
     def __init__(self, *args, **kwargs):
         self.pingval = True
         # increment the reference counter
