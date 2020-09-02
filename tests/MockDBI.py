@@ -151,6 +151,16 @@ def find_columns(stmt):
             columns.append(p)
     return columns
 
+def process_aggregates(stmt):
+    tstmt = stmt.upper()
+    loc = tstmt.find('LISTAGG')
+    asloc = tstmt.find(' AS ', loc)
+    if asloc <= loc:
+        raise Exception('Syntax error')
+    if loc < tstmt.find(' WITHIN GROUP', loc) < asloc:
+        stmt = stmt[:tstmt.find(' WITHIN GROUP')] + stmt[asloc:]
+    stmt = re.sub('listagg', 'GROUP_CONCAT', stmt, re.IGNORECASE)
+    return stmt
 
 def convert_PROCEDURES(stmt):
     """ Function to convert Oracle TO_DATE statement into a timestamp useable
@@ -349,6 +359,8 @@ class MockCursor(sqlite3.Cursor):
         """
         if 'materialize' in stmt:
             stmt = self.process_materialize(stmt)
+        if 'listagg' in stmt:
+            stmt = process_aggregates(stmt)
         if 'select USER, table_name' in stmt and stmt.count('UNION') == 3:
             return "select user,table_name,preference from ingest_test"
         if '.nextval from dual' in stmt and 'connect by' in stmt:
