@@ -8,3 +8,11 @@ CREATE TABLE "COADD_OBJECT_TEST"  (
     "PFW_ATTEMPT_ID" INTEGER NOT NULL
     );
 
+CREATE VIEW "COADD_OBJECT_TEST2"
+AS
+SELECT
+coadd_object_id as id,
+filename, object_number,
+parent_number,
+band, tilename, pfw_attempt_id
+from COADD_OBJECT_TEST;
