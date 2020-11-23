@@ -22,6 +22,7 @@ import shutil
 from dateutil import parser
 
 import despydb.errors as errors
+import despydb.desdbi_defs as desdbi_defs
 
 
 # Construct a name for the v$session module column to allow database auditing.
@@ -483,7 +484,13 @@ class SqLiteConnection:
         SqLiteConnection.__refcount += 1
         self.__closed = False
         if SqLiteConnection.home_dir is None:
-            db_file = access_data['db_file']
+            try:
+                db_file = access_data['db_file']
+            except KeyError:
+                try:
+                    db_file = os.environ[desdbi_defs.DES_SQLITE_FILE]
+                except KeyError:
+                    raise Exception("No sqlite database file given")
             try:
                 home_dir = access_data['home_dir']
             except KeyError:
