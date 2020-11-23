@@ -102,9 +102,9 @@ class DesDbi:
                 self.configdict['threaded'] = threaded
                 import despydb.oracon
                 self.conClass = despydb.oracon.OracleConnection
-            #elif self.type == 'postgres':
-            #    import despydb.pgcon
-            #    self.conClass = despydb.pgcon.PostgresConnection
+            elif self.type == 'sqlite':
+                import despydb.sqlitecon
+                self.conClass = despydb.sqlitecon.SqLiteConnection
             elif self.type == 'test':
                 sys.path.append('../../tests')
                 import MockDBI
