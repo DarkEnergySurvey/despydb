@@ -1,11 +1,12 @@
 """
-    Module for creating a DES db connection to an SqLite database.
+    Module for creating a DES db connection.
 
-    This module will connect to an existing SqLite database. It is instantiated and used in the same
-    fashion as the oracle database via despydb.desdbi.DesDbi or one of its subclasses. Sqlite3
-    databases in python are effectively single threaded due to file locking etc in the sqlite3. This
-    module attempts to mimic multi-thread access to the database by instantiating a singleton for
-    the actual interface. But it is not perfect and may not always behave as expected.
+    This module will create a connection to an existing SqLite database.
+    It is instantiated and used in the same fashion as the oracle database
+    via despydb.desdbi.DesDbi or one of its subclasses. Sqlite3 databases in python are effectively
+    single threaded due to file locking etc in the sqlite3. This module attempts to mimic
+    multi-thread access to the database by instantiating a singleton for the actual interface. But it
+    is not perfect and may not always behave as expected.
 """
 import sqlite3
 
@@ -245,7 +246,7 @@ def convert_PROCEDURES(stmt):
     return stmt
 
 class SqLiteCursor(sqlite3.Cursor):
-    """ Class to create a cursor. Can be used just like an oracle cursor. Oracle specific
+    """ Class for cursor interaction. Can be used just like an oracle cursor. Oracle specific
         commands are interpreted and converted to sqlite versions, although this is not guaranteed.
         DES oracle procedures are also converted.
     """
@@ -435,7 +436,7 @@ class SqLiteCursor(sqlite3.Cursor):
             raise Exception("Unknown proc called")
 
 class SqLiteConnection:
-    """ Class for creating a connection, using sqlite3. This class creates a (or uses an existing)
+    """ Class for creating an sqLite connection. This class creates a (or uses an existing)
         singleton instance of a connection to the sqlite3 database. It mirrors the behvior of the DES
         Oracle database, inculding procedures and global temp tables.
     """
@@ -488,7 +489,7 @@ class SqLiteConnection:
             except KeyError:
                 home_dir = os.environ['run_dir']
         if SqLiteConnection.__instance is None:
-            SqLiteConnection.__instance = SqLiteConnection(db_file, home_dir,
+            SqLiteConnection.__instance = _SqLiteConnection(db_file, home_dir,
                                                         SqLiteConnection.temp_tables)
 
     def teardown(self):
@@ -537,7 +538,7 @@ class SqLiteConnection:
             raise Exception("Cannot operate on a closed database")
         return getattr(SqLiteConnection.__instance, name)
 
-class SqLiteConnection(sqlite3.Connection):
+class _SqLiteConnection(sqlite3.Connection):
     """
     Provide cx_Oracle-specific implementations of canonical database methods
 
@@ -612,7 +613,7 @@ class SqLiteConnection(sqlite3.Connection):
         """
         curs = self.cursor()
         self.clearTempTables(curs)
-        super(SqLiteConnection, self).commit()
+        super(_SqLiteConnection, self).commit()
 
     def clearTempTables(self, curs):
         """ Clear any temp tables
@@ -627,7 +628,7 @@ class SqLiteConnection(sqlite3.Connection):
         for table in self.temp_tables:
             cur.execute('drop table %s' % table)
 
-        super(SqLiteConnection, self).close()
+        super(_SqLiteConnection, self).close()
 
     def cursor(self, fetchsize=None):
         """
