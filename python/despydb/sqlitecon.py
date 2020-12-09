@@ -17,6 +17,7 @@ import os
 import inspect
 import glob
 import re
+import sys
 
 import shutil
 from dateutil import parser
@@ -259,6 +260,7 @@ class SqLiteCursor(sqlite3.Cursor):
         self.fail = False
         sqlite3.Cursor.__init__(self, *args, **kwargs)
         self.num = None
+        self._results = None
 
     def fetchall(self):
         """ Get all results from the last query
@@ -444,6 +446,7 @@ class SqLiteConnection:
     __instance = None
     home_dir = None
     __refcount = 0
+    __closed = False
     temp_tables = {'OPM_FILENAME_GTT': {'FILENAME': 'TEXT',
                                         'COMPRESSION' :'TEXT'},
                    'GTT_FILENAME': {'FILENAME': 'TEXT',
@@ -482,7 +485,6 @@ class SqLiteConnection:
         self.pingval = True
         # increment the reference counter
         SqLiteConnection.__refcount += 1
-        self.__closed = False
         if SqLiteConnection.home_dir is None:
             try:
                 db_file = access_data['db_file']
@@ -508,12 +510,14 @@ class SqLiteConnection:
         except:
             pass
 
-    def close(self):
+    def close(self, refcount=None):
         """ Mimic the closing of a database connection.
         """
-        self._close()
+        if refcount is None:
+            refcount = sys.getrefcount(self)
+        self._close(refcount)
 
-    def _close(self):
+    def _close(self, refcount):
         """ Internal method to mimic the closing of a connection as we do not want to actually close
             the database if there are other connections through the singleton.
 
@@ -523,10 +527,14 @@ class SqLiteConnection:
                 Whether to force the closing of the database connection. Useful when running tests.
                 Default is False, do not force it to close.
         """
-        self.__closed = True
-        self.pingval = False
+        #self.__closed = True
+        #self.pingval = False
         # decrement the reference counter
-        SqLiteConnection.__refcount -= 1
+        #SqLiteConnection.__refcount -= 1
+        #if SqLiteConnection.__refcount == 0:
+        if refcount < 5:
+            SqLiteConnection.__closed = True
+            self.__instance.close()
 
     def ping(self):
         """ Mimic the pinging of the database.
@@ -541,7 +549,7 @@ class SqLiteConnection:
         """ Pass all other method calls on to the connection.
         """
         # if this connection is closed then throw an error
-        if self.__closed:
+        if SqLiteConnection.__closed:
             raise Exception("Cannot operate on a closed database")
         return getattr(SqLiteConnection.__instance, name)
 

@@ -23,6 +23,7 @@
 __version__ = "2.0.0"
 
 import sys
+import gc
 import copy
 import time
 import socket
@@ -97,7 +98,7 @@ class DesDbi:
             self.type = self.configdict['type']
 
             serviceaccess.check(self.configdict, 'DB')
-
+            print(f"connecting to {section}")
             if self.type == 'oracle':
                 self.configdict['threaded'] = threaded
                 import despydb.oracon
@@ -153,6 +154,7 @@ class DesDbi:
         trycnt = 0
         done = False
         lasterr = ""
+        print(self.configdict)
         while not done and trycnt < MAXTRIES:
             trycnt += 1
             try:
@@ -209,6 +211,9 @@ class DesDbi:
     def close(self):
         """ Close the current connection, disabling any open cursors.
         """
+        if self.type == 'sqlite':
+            _ = gc.collect()
+            return self.con.close(sys.getrefcount(self))
         return self.con.close()
 
     def commit(self):
