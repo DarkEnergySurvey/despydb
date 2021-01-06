@@ -98,7 +98,6 @@ class DesDbi:
             self.type = self.configdict['type']
 
             serviceaccess.check(self.configdict, 'DB')
-            print(f"connecting to {section}")
             if self.type == 'oracle':
                 self.configdict['threaded'] = threaded
                 import despydb.oracon
