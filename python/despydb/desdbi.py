@@ -153,7 +153,6 @@ class DesDbi:
         trycnt = 0
         done = False
         lasterr = ""
-        print(self.configdict)
         while not done and trycnt < MAXTRIES:
             trycnt += 1
             try:
