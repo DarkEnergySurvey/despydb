@@ -370,7 +370,7 @@ class MockCursor(sqlite3.Cursor):
             stmt = stmt.replace(k, v)
         return stmt
 
-    def execute(self, stmt, params=()):
+    def execute(self, stmt, params=(), **kwargs):
         """ Execute the given query, substituting in any parameters.
 
             Parameters
@@ -381,6 +381,8 @@ class MockCursor(sqlite3.Cursor):
             params : iterable
                 The paremters to substitue in to the query.
         """
+        if kwargs:
+            params = kwargs
         # do any substitutions
         if params:
             if isinstance(params, (tuple, list, set)):
