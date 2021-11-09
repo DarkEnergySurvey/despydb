@@ -84,7 +84,10 @@ def convert_timestamp(data):
         -------
         datetime object representing the input
     """
-    return datetime.datetime.fromtimestamp(float(data))
+    try:
+        return datetime.datetime.fromtimestamp(float(data))
+    except ValueError:
+        return datetime.datetime.fromisoformat(data.decode("utf-8"))
 
 def find_balance(stmt, start=0):
     """ Function to find the outermost set of balanced parentheses.
@@ -242,7 +245,11 @@ def convert_PROCEDURES(stmt):
         orig = orig.replace('(', '', 1)
         orig = orig.replace(')', '', 1)
         stmt = orig
-    #print(stmt)
+    if '(select' in stmt.lower() and 'insert' in stmt.lower():
+        lst = stmt.lower()
+        loc = lst.find('(select')
+        end = find_balance(lst, loc)
+        stmt = stmt[:loc] + stmt[loc + 1: end - 1] + stmt[end:]
     return stmt
 
 class Slot(int):
